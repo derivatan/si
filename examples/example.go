@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"github.com/derivatan/si"
 	"strings"
+	// TODO: uncomment this, and add this to go.mod
 	// _ "github.com/lib/pq"
 )
 
 func main() {
-	// Db connection
+	// Db connections
+	// TODO: update dsn
 	db, err := sql.Open("postgres", "host=localhost port=5432 user=postgres password=postgres dbname=public sslmode=disable")
 	if err != nil {
 		panic(err)
