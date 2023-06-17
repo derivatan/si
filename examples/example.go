@@ -63,4 +63,12 @@ func main() {
 	}
 	fmt.Println(pinkFloydContact.Email)
 
+	// Save pink floyd contacts with a new phone number.
+	fmt.Println("\nExample 5 - Save")
+	pinkFloydContact.Phone = "321"
+	err = si.Save(pinkFloydContact)
+	if err != nil {
+		panic(err)
+	}
+
 }
