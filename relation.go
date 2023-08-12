@@ -130,6 +130,9 @@ func (r *Relation[F, T]) WithDeleted() *Relation[F, T] {
 }
 
 func (r *Relation[F, T]) Execute(result []F) error {
+	if len(result) < 1 {
+		return nil
+	}
 	var ids []string
 	for _, r2 := range result {
 		ids = append(ids, r.relationType.collectID(r2).String())
