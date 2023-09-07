@@ -21,6 +21,10 @@ func (c contact) GetModel() si.Model {
 	return c.Model
 }
 
+func (c contact) GetTable() string {
+	return "contacts"
+}
+
 func (c contact) Artist() *si.Relation[contact, artist] {
 	return si.BelongsTo[contact, artist](c, "artist", func(c *contact) *si.RelationData[artist] {
 		return &c.artist
@@ -38,6 +42,10 @@ type artist struct {
 
 func (a artist) GetModel() si.Model {
 	return a.Model
+}
+
+func (a artist) GetTable() string {
+	return "artists"
 }
 
 func (a artist) Contact() *si.Relation[artist, contact] {
@@ -64,6 +72,10 @@ type album struct {
 
 func (a album) GetModel() si.Model {
 	return a.Model
+}
+
+func (a album) GetTable() string {
+	return "albums"
 }
 
 func (a album) Artist() *si.Relation[album, artist] {

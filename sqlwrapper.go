@@ -2,16 +2,18 @@ package si
 
 import "database/sql"
 
-type SQLDB interface {
+// This is an example implementation for the `sql.DB` for is usage.
+
+type SqlDB interface {
 	Query(query string, args ...any) (*sql.Rows, error)
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
 type WrapDB struct {
-	db *sql.DB
+	db SqlDB
 }
 
-func NewSQLDB(db *sql.DB) *WrapDB {
+func NewSQLDB(db SqlDB) *WrapDB {
 	return &WrapDB{
 		db: db,
 	}

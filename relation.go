@@ -138,7 +138,7 @@ func (r *Relation[F, T]) Execute(result []F) error {
 		ids = append(ids, r.relationType.collectID(r2).String())
 	}
 
-	query := Query[T]().Where(r.relationType.queryColumn(), "IN", ids)
+	query := Query[T](nil).Where(r.relationType.queryColumn(), "IN", ids)
 	if len(r.query.filters) > 0 {
 		query = query.WhereF(func(q *QueryBuilder[T]) *QueryBuilder[T] {
 			return r.query

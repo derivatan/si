@@ -20,25 +20,23 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	tx, _ := db.Begin()
 
-	db.Query()
-	tx.Query()
-	db.Exec()
-	tx.Exec()
 	si.SetLogger(func(a ...any) {
 		//fmt.Println(a...)
 	})
 	m.Run()
 }
 
-func DB(t *testing.T) DB {
+func DB(t *testing.T) si.DB {
 	tx, err := db.Begin()
 	if err != nil {
 		t.Fatal("Failed to create database transaction")
 	}
 	t.Cleanup(func() {
-		tx.Rollback()
+		err := tx.Rollback()
+		if err != nil {
+			t.Fatal("Failed to rollback database transaction")
+		}
 	})
 	return si.NewSQLDB(tx)
 }

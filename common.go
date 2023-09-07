@@ -10,18 +10,6 @@ import (
 	"time"
 )
 
-// DB interface is based on the `sql.DB` and `sql.Tx.
-type DB interface {
-	Exec(query string, args ...any) (any, error)
-	Query(query string, args ...any) (Rows, error)
-}
-
-type Rows interface {
-	Next() bool
-	Scan(dest ...any) error
-	Close() error
-}
-
 type Model struct {
 	ID        *uuid.UUID `si:"id"`
 	CreatedAt time.Time  `si:"created_at"`
@@ -35,7 +23,7 @@ type Modeler interface {
 }
 
 var (
-	config                secretIngredientConfig
+	config                secretIngredientConfig // TODO: remove this?
 	ResourceNotFoundError = errors.New("resource not found")
 )
 

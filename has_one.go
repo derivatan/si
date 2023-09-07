@@ -18,9 +18,9 @@ func HasOne[F, T Modeler](model F, fieldName string, relationDataFunc func(f *F)
 	column := getColumnNameString(toType, relationFieldName)
 
 	return &Relation[F, T]{
-		model:        model,
-		query:        Query[T](),
-		get:          Query[T]().Where(column, "=", model.GetModel().ID),
+		model: model,
+		//query:        Query[T](),
+		//get:          Query[T]().Where(column, "=", model.GetModel().ID),
 		relationData: relationDataFunc,
 		relationType: hasOneConf[F, T]{
 			idColumn: column,
