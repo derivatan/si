@@ -2,6 +2,11 @@ package si
 
 import "database/sql"
 
+type SQLDB interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
 type WrapDB struct {
 	db *sql.DB
 }

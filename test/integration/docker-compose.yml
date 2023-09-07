@@ -1,0 +1,28 @@
+version: "3.6"
+
+networks:
+  si-integration-test:
+
+services:
+
+  runner:
+    image: golang:1.20-alpine
+    working_dir: /usr/src/app/
+    networks:
+      - si-integration-test
+    command: sh -c "go test -tags=integration test/integration/*.go -v ${PARAMS}"
+    volumes:
+      - ./../../:/usr/src/app/
+
+  database:
+    image: postgres:15.2-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+    networks:
+      - si-integration-test
+    volumes:
+      - ./db.sql:/docker-entrypoint-initdb.d/db.sql
+    ports:
+      - "5433:5432"
+    expose:
+      - 5433

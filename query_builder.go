@@ -8,6 +8,8 @@ import (
 )
 
 type QueryBuilder[T Modeler] struct {
+	db DB
+
 	withs       []func(m T, r []T) error
 	withDeleted bool
 
@@ -18,6 +20,9 @@ type QueryBuilder[T Modeler] struct {
 
 	select_      []string
 	selectValues []any
+
+	havings  []filter
+	groupBys []string
 }
 
 ///////////////
@@ -28,7 +33,7 @@ type QueryBuilder[T Modeler] struct {
 func (q *QueryBuilder[T]) Get() ([]T, error) {
 	query, values := q.buildSelect()
 	log(query, values)
-	rows, err := config.db.Query(query, values...)
+	rows, err := q.db.Query(query, values...)
 	if err != nil {
 		return nil, fmt.Errorf("si.get: execute query: %w", err)
 	}
@@ -194,6 +199,16 @@ func (q *QueryBuilder[T]) Skip(number int) *QueryBuilder[T] {
 	return q
 }
 
+func (q *QueryBuilder[T]) Having(condition any) *QueryBuilder[T] {
+	q.havings = append(q.havings) // TODO.
+	return q
+}
+
+func (q *QueryBuilder[T]) GroupBy(field string) *QueryBuilder[T] {
+	q.groupBys = append(q.groupBys, field)
+	return q
+}
+
 // With will retrieve a relation, while getting the main object(s).
 func (q *QueryBuilder[T]) With(f func(m T, r []T) error) *QueryBuilder[T] {
 	q.withs = append(q.withs, f)
@@ -207,12 +222,14 @@ func (q *QueryBuilder[T]) WithDeleted() *QueryBuilder[T] {
 }
 
 func (q *QueryBuilder[T]) buildSelect() (string, []any) {
-	conf := getModelConf[T]()
-	query := "SELECT "
+
 	var filterValues []any
+	paramCounter := 1
+	specialSelect := len(q.select_) > 0
+	query := "SELECT "
 
 	// Select
-	if len(q.select_) > 0 {
+	if specialSelect {
 		query += strings.Join(q.select_, ",")
 	} else {
 		typeInfo := getTypeInfo(new(T))
@@ -220,7 +237,7 @@ func (q *QueryBuilder[T]) buildSelect() (string, []any) {
 	}
 
 	// From
-	query += fmt.Sprintf(" FROM %s", conf.Table)
+	query += fmt.Sprintf(" FROM %s", (*new(T)).GetTable())
 
 	// With Deleted
 	if !q.withDeleted {
@@ -237,9 +254,21 @@ func (q *QueryBuilder[T]) buildSelect() (string, []any) {
 	// Where
 	if len(q.filters) > 0 {
 		var filterSql string
-		paramCounter := 1
 		filterSql, filterValues, paramCounter = q.buildFilters(q.filters, paramCounter)
 		query += fmt.Sprintf(" WHERE%s", filterSql)
+	}
+
+	// Group By
+	if len(q.groupBys) > 0 && specialSelect {
+		query += " GROUP BY " + strings.Join(q.groupBys, ", ")
+	}
+
+	// Having
+	if len(q.havings) > 0 && len(q.groupBys) > 0 && specialSelect {
+		filterSql, havingFilterValues, havingParamCounter := q.buildFilters(q.havings, paramCounter)
+		query += fmt.Sprintf(" HAVING%s", filterSql)
+		filterValues = append(filterValues, havingFilterValues)
+		paramCounter += havingParamCounter
 	}
 
 	// Order by

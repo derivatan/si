@@ -1,4 +1,6 @@
-package main
+//go:build integration
+
+package integration
 
 import (
 	"github.com/derivatan/si"
@@ -29,7 +31,6 @@ type artist struct {
 	si.Model
 
 	Name string
-	Year int
 
 	contact si.RelationData[contact]
 	albums  si.RelationData[album]

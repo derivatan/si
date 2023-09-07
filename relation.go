@@ -171,5 +171,3 @@ type relationType[F, T Modeler] interface {
 	groupBy(T) uuid.UUID
 	queryColumn() string
 }
-
-type Executed struct{}
