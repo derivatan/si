@@ -3,7 +3,9 @@
 package integration
 
 import (
+	"fmt"
 	"github.com/derivatan/si"
+	"github.com/gofrs/uuid"
 	"testing"
 
 	_ "github.com/lib/pq"
@@ -11,13 +13,13 @@ import (
 )
 
 func TestGet(t *testing.T) {
-	t.Cleanup(ResetDB)
-	name := "Pink FLoyd"
-	Seed([]artist{
+	db := DB(t)
+	name := "Pink Floyd"
+	Seed(db, []artist{
 		{Name: name},
 	})
 
-	list, err := si.Query[artist]().Get()
+	list, err := si.Query[artist](db).Get()
 
 	assert.NoError(t, err)
 	assert.Len(t, list, 1)
@@ -25,14 +27,14 @@ func TestGet(t *testing.T) {
 }
 
 func TestFirst(t *testing.T) {
-	t.Cleanup(ResetDB)
+	db := DB(t)
 	name := "Michael Jackson"
-	Seed([]artist{
+	Seed(db, []artist{
 		{Name: name},
 		{Name: "Stevie Wonder"},
 	})
 
-	obj, err := si.Query[artist]().OrderBy("name", true).First()
+	obj, err := si.Query[artist](db).OrderBy("name", true).First()
 
 	assert.NoError(t, err)
 	assert.NotNil(t, obj)
@@ -40,43 +42,74 @@ func TestFirst(t *testing.T) {
 }
 
 func TestFind(t *testing.T) {
-	t.Cleanup(ResetDB)
-	Seed("artists", []map[string]any{
-		{"name": "something"},
+	db := DB(t)
+	name := "Portishead"
+	Seed(db, []artist{
+		{Name: name},
 	})
+
+	obj, err := si.Query[artist](db).Where("name", "=", name).Find()
+
+	assert.NoError(t, err)
+	assert.NotNil(t, obj)
+	assert.Equal(t, name, obj.Name)
 }
 
 func TestFindWithID(t *testing.T) {
+	db := DB(t)
+	id := uuid.FromStringOrNil("12341234-1234-1234-1234-123412341234")
+	name := "Rammstein"
+	Seed(db, []artist{
+		{Model: si.Model{ID: &id}, Name: name},
+		{Name: "Dream Theater"},
+	})
 
+	for _, i2 := range si.Query[artist](db).MustGet() {
+		fmt.Println(i2)
+	}
+	obj, err := si.Query[artist](db).Find(id)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, obj)
+	assert.Equal(t, name, obj.Name)
 }
 
-func TestWithWrongResult(t *testing.T) {
+func TestWithWrongNumberOfResults(t *testing.T) {
+	db := DB(t)
+	Seed(db, []artist{
+		{Name: "Eminem"},
+		{Name: "The Beatles"},
+	})
 
+	obj, err := si.Query[artist](db).Find()
+
+	assert.Nil(t, obj)
+	assert.Error(t, err)
 }
 
 func TestGetArtists(t *testing.T) {
-	t.Cleanup(ResetDB)
-	Seed("artists", []map[string]any{
-		{"name": "Beethoven"},
-		{"name": "Mozart"},
+	db := DB(t)
+	Seed(db, []artist{
+		{Name: "Beethoven"},
+		{Name: "Mozart"},
 	})
 
-	rows, err := si.Query[artist]().Get()
+	rows, err := si.Query[artist](db).Get()
 
 	assert.NoError(t, err)
 	assert.Len(t, rows, 2)
 }
 
 func TestGetWhere(t *testing.T) {
-	t.Cleanup(ResetDB)
+	db := DB(t)
 	wantedName := "Second"
-	Seed("artists", []map[string]any{
-		{"name": "First"},
-		{"name": wantedName},
-		{"name": "Third"},
+	Seed(db, []artist{
+		{Name: "First"},
+		{Name: wantedName},
+		{Name: "Third"},
 	})
 
-	rows, err := si.Query[artist]().Where("name", "=", wantedName).Get()
+	rows, err := si.Query[artist](db).Where("name", "=", wantedName).Get()
 
 	assert.NoError(t, err)
 	assert.Len(t, rows, 1)

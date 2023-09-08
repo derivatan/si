@@ -10,8 +10,7 @@ import (
 )
 
 var (
-	db           *sql.DB
-	seededTables []string
+	db *sql.DB
 )
 
 func TestMain(m *testing.M) {
@@ -38,24 +37,14 @@ func DB(t *testing.T) si.DB {
 			t.Fatal("Failed to rollback database transaction")
 		}
 	})
-	return si.NewSQLDB(tx)
+	return si.WrapDB(tx)
 }
 
-func Seed[T si.Modeler](tx *sql.Tx, list []T) {
+func Seed[T si.Modeler](tx si.DB, list []T) {
 	for _, elem := range list {
 		err := si.Save[T](tx, &elem)
 		if err != nil {
 			panic(fmt.Errorf("Fialed to seed '%T': %w", elem, err))
 		}
 	}
-}
-
-func ResetDB() {
-	for _, table := range seededTables {
-		_, err := db.Exec(fmt.Sprintf("DELETE FROM %s WHERE 1 = 1", table))
-		if err != nil {
-			panic(fmt.Errorf("reset DB: %w", err))
-		}
-	}
-	seededTables = []string{}
 }
