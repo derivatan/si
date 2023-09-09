@@ -26,15 +26,16 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
+// DB returns a transaction, that will rollback when the test is finished.
 func DB(t *testing.T) si.DB {
 	tx, err := db.Begin()
 	if err != nil {
-		t.Fatal("Failed to create database transaction")
+		t.Fatalf("Failed to create database transaction: %v", err)
 	}
 	t.Cleanup(func() {
 		err := tx.Rollback()
 		if err != nil {
-			t.Fatal("Failed to rollback database transaction")
+			t.Fatalf("Failed to rollback database transaction: %v", err)
 		}
 	})
 	return si.WrapDB(tx)

@@ -3,9 +3,7 @@
 package integration
 
 import (
-	"fmt"
 	"github.com/derivatan/si"
-	"github.com/gofrs/uuid"
 	"testing"
 
 	_ "github.com/lib/pq"
@@ -28,7 +26,7 @@ func TestGet(t *testing.T) {
 
 func TestFirst(t *testing.T) {
 	db := DB(t)
-	name := "Michael Jackson"
+	name := "Ray Charles"
 	Seed(db, []artist{
 		{Name: name},
 		{Name: "Stevie Wonder"},
@@ -57,18 +55,16 @@ func TestFind(t *testing.T) {
 
 func TestFindWithID(t *testing.T) {
 	db := DB(t)
-	id := uuid.FromStringOrNil("12341234-1234-1234-1234-123412341234")
 	name := "Rammstein"
 	Seed(db, []artist{
-		{Model: si.Model{ID: &id}, Name: name},
+		{Name: name},
 		{Name: "Dream Theater"},
 	})
+	setupObj, setupErr := si.Query[artist](db).Where("name", "=", name).Find()
 
-	for _, i2 := range si.Query[artist](db).MustGet() {
-		fmt.Println(i2)
-	}
-	obj, err := si.Query[artist](db).Find(id)
+	obj, err := si.Query[artist](db).Find(*setupObj.ID)
 
+	assert.NoError(t, setupErr)
 	assert.NoError(t, err)
 	assert.NotNil(t, obj)
 	assert.Equal(t, name, obj.Name)
@@ -87,20 +83,31 @@ func TestWithWrongNumberOfResults(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestGetArtists(t *testing.T) {
+// Builder functions
+
+func TestSelect(t *testing.T) {
 	db := DB(t)
 	Seed(db, []artist{
-		{Name: "Beethoven"},
-		{Name: "Mozart"},
+		{Name: "314"},
+		{Name: "141"},
+		{Name: "271"},
 	})
 
-	rows, err := si.Query[artist](db).Get()
+	var numResults, max, min int
+	selects := []string{
+		"COUNT(1)",
+		"MIN(name)",
+		"MAX(name)",
+	}
+	_, err := si.Query[artist](db).Select(selects, &numResults, &min, &max).Get()
 
 	assert.NoError(t, err)
-	assert.Len(t, rows, 2)
+	assert.Equal(t, 3, numResults)
+	assert.Equal(t, 141, min)
+	assert.Equal(t, 314, max)
 }
 
-func TestGetWhere(t *testing.T) {
+func TestWhere(t *testing.T) {
 	db := DB(t)
 	wantedName := "Second"
 	Seed(db, []artist{
@@ -114,6 +121,42 @@ func TestGetWhere(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, rows, 1)
 	assert.Equal(t, rows[0].Name, wantedName)
+}
+func TestWhereContains(t *testing.T) {
+	db := DB(t)
+	name := "Beethoven"
+	Seed(db, []artist{
+		{Name: name},
+		{Name: "Mozart"},
+	})
+
+	rows, err := si.Query[artist](db).Where("name", "LIKE", "%ee%").Get()
+
+	assert.NoError(t, err)
+	assert.Len(t, rows, 1)
+	assert.Equal(t, rows[0].Name, name)
+}
+
+func TestOrWhere(t *testing.T) {
+	db := DB(t)
+	name1 := "Prince"
+	name2 := "Queen"
+	Seed(db, []artist{
+		{Name: name1},
+		{Name: name2},
+		{Name: "Michael Jackson"},
+	})
+
+	rows, err := si.Query[artist](db).
+		Where("name", "=", name1).
+		OrWhere("name", "=", name2).
+		OrderBy("name", true).
+		Get()
+
+	assert.NoError(t, err)
+	assert.Len(t, rows, 2)
+	assert.Equal(t, name1, rows[0].Name)
+	assert.Equal(t, name2, rows[1].Name)
 }
 
 // Test aggregations (with new functions)

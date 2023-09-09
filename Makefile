@@ -5,3 +5,7 @@ integration:
 ## Cleanup
 clean:
 	docker-compose -f test/integration/docker-compose.yml rm
+
+db:
+	docker-compose -f test/integration/docker-compose.yml start database
+
