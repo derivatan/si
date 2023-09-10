@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"fmt"
 	"github.com/derivatan/si"
 	"testing"
 
@@ -159,12 +160,121 @@ func TestOrWhere(t *testing.T) {
 	assert.Equal(t, name2, rows[1].Name)
 }
 
-// Test aggregations (with new functions)
+func TestWhereF(t *testing.T) {
+	db := DB(t)
+	Seed(db, []artist{
+		{Name: "Danny Elfman"},
+		{Name: "Hans Zimmer"},
+		{Name: "John Williams"},
+	})
 
-// Test types
+	// WHERE a AND (b OR c)
+	rows, err := si.Query[artist](db).Where("name", "ILIKE", "%m%").WhereF(func(q *si.QueryBuilder[artist]) *si.QueryBuilder[artist] {
+		return q.Where("name", "ILIKE", "%Zi%").OrWhere("name", "ILIKE", "%Wi%")
+	}).Get()
 
-// Test all query function
+	assert.NoError(t, err)
+	assert.Len(t, rows, 2)
+}
+
+func TestOrWhereF(t *testing.T) {
+	db := DB(t)
+	Seed(db, []artist{
+		{Name: "Björk"},
+		{Name: "Daft Punk"},
+		{Name: "The Knife"},
+	})
+
+	// WHERE a OR (b AND c)
+	rows, err := si.Query[artist](db).Where("name", "ILIKE", "%knife%").OrWhereF(func(q *si.QueryBuilder[artist]) *si.QueryBuilder[artist] {
+		return q.Where("name", "ILIKE", "%daft%").Where("name", "ILIKE", "%punk%")
+	}).Get()
+
+	assert.NoError(t, err)
+	assert.Len(t, rows, 2)
+}
+
+func TestOrderBy(t *testing.T) {
+	db := DB(t)
+	nameA := "Avalanches, The"
+	nameB := "Basement Jaxx"
+	nameC := "Cure, The"
+	nameD := "Deep Purple"
+	Seed(db, []artist{
+		{Name: nameB},
+		{Name: nameC},
+		{Name: nameA},
+		{Name: nameD},
+	})
+
+	rowsAsc, errAsc := si.Query[artist](db).OrderBy("name", true).Get()
+	rowsDesc, errDesc := si.Query[artist](db).OrderBy("name", false).Get()
+
+	assert.NoError(t, errAsc)
+	assert.NoError(t, errDesc)
+	assert.Equal(t, nameA, rowsAsc[0].Name)
+	assert.Equal(t, nameB, rowsAsc[1].Name)
+	assert.Equal(t, nameC, rowsAsc[2].Name)
+	assert.Equal(t, nameD, rowsAsc[3].Name)
+	assert.Equal(t, nameD, rowsDesc[0].Name)
+	assert.Equal(t, nameC, rowsDesc[1].Name)
+	assert.Equal(t, nameB, rowsDesc[2].Name)
+	assert.Equal(t, nameA, rowsDesc[3].Name)
+}
+
+func TestTakeAndSkip(t *testing.T) {
+	db := DB(t)
+	name1 := "Detektivbyrån"
+	name2 := "Trazan & Banarne"
+	name3 := "Electric Banana Band"
+	Seed(db, []artist{
+		{Name: name1},
+		{Name: name2},
+		{Name: name3},
+	})
+
+	rowsTake, errTake := si.Query[artist](db).OrderBy("name", true).Take(2).Get()
+	rowsSkip, errSkip := si.Query[artist](db).OrderBy("name", true).Skip(1).Get()
+
+	assert.NoError(t, errTake)
+	assert.NoError(t, errSkip)
+	assert.Len(t, rowsTake, 2)
+	assert.Equal(t, name1, rowsTake[0].Name)
+	assert.Equal(t, name3, rowsTake[1].Name)
+	assert.Len(t, rowsSkip, 2)
+	assert.Equal(t, name3, rowsSkip[0].Name)
+	assert.Equal(t, name2, rowsSkip[1].Name)
+}
+
+func TestGroupBy(t *testing.T) {
+	db := DB(t)
+	Seed(db, []contact{
+		{Email: "info@email.com", Phone: 101},
+		{Email: "info@email.com", Phone: 103},
+		{Email: "support@email.com", Phone: 107},
+		{Email: "support@email.com", Phone: 109},
+	})
+
+	selects := []string{"email", "SUM(phone)"}
+	type result struct {
+		email string
+		sum   int
+	}
+	a := func() (any, []any) {
+		a := result{}
+		return a, []any{&a.email, &a.sum}
+	}
+	// TODO: How do i get the list in the end?
+	_, err := si.Query[contact](db).GroupSelect(selects, a).GroupBy("email").Get()
+
+	fmt.Println("This is the values.")
+
+	assert.NoError(t, err)
+
+	// TODO: test having here aswell.
+}
+
+// Test data-types on structs. bool, int, time, duration, json...
 
 // Test save
-
 // Test relations

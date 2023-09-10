@@ -18,8 +18,9 @@ type QueryBuilder[T Modeler] struct {
 	take    int
 	skip    int
 
-	select_      []string
+	selects      []string
 	selectValues []any
+	groupValues  func() (any, []any)
 
 	havings  []filter
 	groupBys []string
@@ -43,10 +44,15 @@ func (q *QueryBuilder[T]) Get() ([]T, error) {
 	for rows.Next() {
 		row := new(T)
 		ti := getTypeInfo(row)
-
 		var err error
-		if len(q.select_) > 0 {
-			err = rows.Scan(q.selectValues...)
+		if len(q.selects) > 0 {
+			if q.groupValues != nil {
+				obj, scans := q.groupValues()
+				err = rows.Scan(scans...)
+				// obj -> Add this onto a list???, how to return the list?
+			} else {
+				err = rows.Scan(q.selectValues...)
+			}
 		} else {
 			err = rows.Scan(ti.Values...)
 		}
@@ -142,9 +148,23 @@ type filter struct {
 	Sub       []filter
 }
 
-func (q *QueryBuilder[T]) Select(select_ []string, selectValues ...any) *QueryBuilder[T] {
-	q.select_ = select_
-	q.selectValues = selectValues
+func (q *QueryBuilder[T]) Select(selects []string, values ...any) *QueryBuilder[T] {
+	if len(q.selects) > 0 {
+		log("Select values are already set. Ignoring new values.")
+		return q
+	}
+	q.selects = selects
+	q.selectValues = values
+	return q
+}
+
+func (q *QueryBuilder[T]) GroupSelect(selects []string, scanArgs func() (any, []any)) *QueryBuilder[T] {
+	if len(q.selects) > 0 {
+		log("Select values are already set. Ignoring new values.")
+		return q
+	}
+	q.selects = selects
+	q.groupValues = scanArgs
 	return q
 }
 
@@ -199,13 +219,13 @@ func (q *QueryBuilder[T]) Skip(number int) *QueryBuilder[T] {
 	return q
 }
 
-func (q *QueryBuilder[T]) Having(condition any) *QueryBuilder[T] {
-	q.havings = append(q.havings) // TODO.
+func (q *QueryBuilder[T]) GroupBy(field string) *QueryBuilder[T] {
+	q.groupBys = append(q.groupBys, field)
 	return q
 }
 
-func (q *QueryBuilder[T]) GroupBy(field string) *QueryBuilder[T] {
-	q.groupBys = append(q.groupBys, field)
+func (q *QueryBuilder[T]) Having(condition any) *QueryBuilder[T] {
+	q.havings = append(q.havings) // TODO.
 	return q
 }
 
@@ -222,15 +242,14 @@ func (q *QueryBuilder[T]) WithDeleted() *QueryBuilder[T] {
 }
 
 func (q *QueryBuilder[T]) buildSelect() (string, []any) {
-
 	var filterValues []any
 	paramCounter := 1
-	specialSelect := len(q.select_) > 0
+	specialSelect := len(q.selects) > 0
 	query := "SELECT "
 
 	// Select
 	if specialSelect {
-		query += strings.Join(q.select_, ",")
+		query += strings.Join(q.selects, ",")
 	} else {
 		typeInfo := getTypeInfo(new(T))
 		query += strings.Join(typeInfo.Columns, ",")

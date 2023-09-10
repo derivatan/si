@@ -19,7 +19,7 @@ CREATE TABLE contacts
     deleted_at TIMESTAMP NULL,
 
     email      TEXT,
-    phone      TEXT,
+    phone      INTEGER,
     artist_id  UUID      NOT NULL
 );
 

@@ -11,7 +11,7 @@ type contact struct {
 	si.Model
 
 	Email    string
-	Phone    string
+	Phone    int
 	ArtistID uuid.UUID
 
 	artist si.RelationData[artist]
