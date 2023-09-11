@@ -26,48 +26,48 @@ func (r *Relation[F, T]) Unload() *Relation[F, T] {
 	return r
 }
 
-func (r *Relation[F, T]) Get() ([]T, error) {
+func (r *Relation[F, T]) Get(db DB) ([]T, error) {
 	rd := r.relationData(&r.model)
 	if rd.loaded {
 		return rd.data, nil
 	}
-	return r.innerFilter().Get()
+	return r.innerFilter().Get(db)
 }
 
-func (r *Relation[F, T]) First() (*T, error) {
+func (r *Relation[F, T]) First(db DB) (*T, error) {
 	rd := r.relationData(&r.model)
 	if rd.loaded {
 		return &rd.data[0], nil
 	}
-	return r.innerFilter().First()
+	return r.innerFilter().First(db)
 }
 
-func (r *Relation[F, T]) Find(id ...uuid.UUID) (*T, error) {
+func (r *Relation[F, T]) Find(db DB, id ...uuid.UUID) (*T, error) {
 	rd := r.relationData(&r.model)
 	if rd.loaded {
 		return &rd.data[0], nil
 	}
-	return r.innerFilter().Find(id...)
+	return r.innerFilter().Find(db, id...)
 }
 
-func (r *Relation[F, T]) MustGet() []T {
-	result, err := r.Get()
+func (r *Relation[F, T]) MustGet(db DB) []T {
+	result, err := r.Get(db)
 	if err != nil {
 		panic(err)
 	}
 	return result
 }
 
-func (r *Relation[F, T]) MustFirst() *T {
-	result, err := r.First()
+func (r *Relation[F, T]) MustFirst(db DB) *T {
+	result, err := r.First(db)
 	if err != nil {
 		panic(err)
 	}
 	return result
 }
 
-func (r *Relation[F, T]) MustFind(id ...uuid.UUID) *T {
-	result, err := r.Find(id...)
+func (r *Relation[F, T]) MustFind(db DB, id ...uuid.UUID) *T {
+	result, err := r.Find(db, id...)
 	if err != nil {
 		panic(err)
 	}
@@ -129,7 +129,7 @@ func (r *Relation[F, T]) WithDeleted() *Relation[F, T] {
 	return r
 }
 
-func (r *Relation[F, T]) Execute(result []F) error {
+func (r *Relation[F, T]) Execute(db DB, result []F) error {
 	if len(result) < 1 {
 		return nil
 	}
@@ -138,14 +138,14 @@ func (r *Relation[F, T]) Execute(result []F) error {
 		ids = append(ids, r.relationType.collectID(r2).String())
 	}
 
-	query := Query[T](nil).Where(r.relationType.queryColumn(), "IN", ids)
+	query := Query[T]().Where(r.relationType.queryColumn(), "IN", ids)
 	if len(r.query.filters) > 0 {
 		query = query.WhereF(func(q *QueryBuilder[T]) *QueryBuilder[T] {
 			return r.query
 		})
 	}
 
-	related, err := query.Get()
+	related, err := query.Get(db)
 	if err != nil {
 		return err
 	}

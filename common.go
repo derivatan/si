@@ -43,9 +43,8 @@ func SetLogger(f func(a ...any)) {
 
 // Query will start a query.
 // Main starting point for retrieving objects.
-func Query[T Modeler](db DB) *QueryBuilder[T] {
+func Query[T Modeler]() *QueryBuilder[T] {
 	return &QueryBuilder[T]{
-		db:      db,
 		filters: []filter{},
 		orderBy: []orderBy{},
 	}

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/derivatan/si"
+	"github.com/gofrs/uuid"
 	"testing"
 )
 
@@ -41,11 +42,14 @@ func DB(t *testing.T) si.DB {
 	return si.WrapDB(tx)
 }
 
-func Seed[T si.Modeler](tx si.DB, list []T) {
+func Seed[T si.Modeler](tx si.DB, list []T) []uuid.UUID {
+	var result []uuid.UUID
 	for _, elem := range list {
 		err := si.Save[T](tx, &elem)
 		if err != nil {
 			panic(fmt.Errorf("Fialed to seed '%T': %w", elem, err))
 		}
+		result = append(result, *elem.GetModel().ID)
 	}
+	return result
 }

@@ -8,8 +8,6 @@ import (
 )
 
 type QueryBuilder[T Modeler] struct {
-	db DB
-
 	withs       []func(m T, r []T) error
 	withDeleted bool
 
@@ -32,10 +30,10 @@ type QueryBuilder[T Modeler] struct {
 ///////////////
 
 // Get will Execute the query and return a list of the result.
-func (q *QueryBuilder[T]) Get() ([]T, error) {
+func (q *QueryBuilder[T]) Get(db DB) ([]T, error) {
 	query, values := q.buildSelect()
 	log(query, values)
-	rows, err := q.db.Query(query, values...)
+	rows, err := db.Query(query, values...)
 	if err != nil {
 		return nil, fmt.Errorf("si.get: execute query: %w", err)
 	}
@@ -71,9 +69,9 @@ func (q *QueryBuilder[T]) Get() ([]T, error) {
 }
 
 // First will execute the query and return the first element of the result
-func (q *QueryBuilder[T]) First() (*T, error) {
+func (q *QueryBuilder[T]) First(db DB) (*T, error) {
 	q.take = 1
-	result, err := q.Get()
+	result, err := q.Get(db)
 	if err != nil {
 		return nil, fmt.Errorf("si.first: %w", err)
 	}
@@ -83,11 +81,11 @@ func (q *QueryBuilder[T]) First() (*T, error) {
 // Find will return the one element in the query result.
 // This will be successful IFF there was one result.
 // The variadic parameter `id` is used to make it optional. If present, only the first element is used.
-func (q *QueryBuilder[T]) Find(id ...uuid.UUID) (*T, error) {
+func (q *QueryBuilder[T]) Find(db DB, id ...uuid.UUID) (*T, error) {
 	if len(id) >= 1 {
 		q = q.Where("id", "=", id[0])
 	}
-	result, err := q.Get()
+	result, err := q.Get(db)
 	if err != nil {
 		return nil, fmt.Errorf("si.find: %w", err)
 	}
@@ -99,8 +97,8 @@ func (q *QueryBuilder[T]) Find(id ...uuid.UUID) (*T, error) {
 }
 
 // MustGet is same as Get, but will panic on error.
-func (q *QueryBuilder[T]) MustGet() []T {
-	result, err := q.Get()
+func (q *QueryBuilder[T]) MustGet(db DB) []T {
+	result, err := q.Get(db)
 	if err != nil {
 		panic(err)
 	}
@@ -108,8 +106,8 @@ func (q *QueryBuilder[T]) MustGet() []T {
 }
 
 // MustFirst is same as First, but will panic on error.
-func (q *QueryBuilder[T]) MustFirst() *T {
-	result, err := q.First()
+func (q *QueryBuilder[T]) MustFirst(db DB) *T {
+	result, err := q.First(db)
 	if err != nil {
 		panic(err)
 	}
@@ -117,8 +115,8 @@ func (q *QueryBuilder[T]) MustFirst() *T {
 }
 
 // MustFind is same as Find, but will panic on error.
-func (q *QueryBuilder[T]) MustFind(id ...uuid.UUID) *T {
-	result, err := q.Find(id...)
+func (q *QueryBuilder[T]) MustFind(db DB, id ...uuid.UUID) *T {
+	result, err := q.Find(db, id...)
 	if err != nil {
 		panic(err)
 	}
@@ -222,6 +220,10 @@ func (q *QueryBuilder[T]) Skip(number int) *QueryBuilder[T] {
 }
 
 func (q *QueryBuilder[T]) GroupBy(field string) *QueryBuilder[T] {
+	if q.groupScan == nil {
+		log("SelectGroup must be called before GroupBy. Will ignore groupby.")
+		return q
+	}
 	q.groupBys = append(q.groupBys, field)
 	return q
 }

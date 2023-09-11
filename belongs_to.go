@@ -23,8 +23,8 @@ func BelongsTo[F, T Modeler](model F, fieldName string, relationDataFunc func(f 
 
 	return &Relation[F, T]{
 		model:        model,
-		query:        Query[T](nil),
-		get:          Query[T](nil).Where("id", "=", idField(model)),
+		query:        Query[T](),
+		get:          Query[T]().Where("id", "=", idField(model)),
 		relationData: relationDataFunc,
 		relationType: belongsToConf[F, T]{
 			idField: idField,

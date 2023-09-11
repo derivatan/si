@@ -17,7 +17,7 @@ func TestGet(t *testing.T) {
 		{Name: name},
 	})
 
-	list, err := si.Query[artist](db).Get()
+	list, err := si.Query[artist]().Get(db)
 
 	assert.NoError(t, err)
 	assert.Len(t, list, 1)
@@ -32,7 +32,7 @@ func TestFirst(t *testing.T) {
 		{Name: "Stevie Wonder"},
 	})
 
-	obj, err := si.Query[artist](db).OrderBy("name", true).First()
+	obj, err := si.Query[artist]().OrderBy("name", true).First(db)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, obj)
@@ -46,7 +46,7 @@ func TestFind(t *testing.T) {
 		{Name: name},
 	})
 
-	obj, err := si.Query[artist](db).Where("name", "=", name).Find()
+	obj, err := si.Query[artist]().Where("name", "=", name).Find(db)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, obj)
@@ -56,15 +56,13 @@ func TestFind(t *testing.T) {
 func TestFindWithID(t *testing.T) {
 	db := DB(t)
 	name := "Rammstein"
-	Seed(db, []artist{
+	ids := Seed(db, []artist{
 		{Name: name},
 		{Name: "Dream Theater"},
 	})
-	setupObj, setupErr := si.Query[artist](db).Where("name", "=", name).Find()
 
-	obj, err := si.Query[artist](db).Find(*setupObj.ID)
+	obj, err := si.Query[artist]().Find(db, ids[0])
 
-	assert.NoError(t, setupErr)
 	assert.NoError(t, err)
 	assert.NotNil(t, obj)
 	assert.Equal(t, name, obj.Name)
@@ -77,7 +75,7 @@ func TestWithWrongNumberOfResults(t *testing.T) {
 		{Name: "The Beatles"},
 	})
 
-	obj, err := si.Query[artist](db).Find()
+	obj, err := si.Query[artist]().Find(db)
 
 	assert.Nil(t, obj)
 	assert.Error(t, err)
@@ -99,7 +97,7 @@ func TestSelect(t *testing.T) {
 		"MIN(name)",
 		"MAX(name)",
 	}
-	_, err := si.Query[artist](db).Select(selects, &numResults, &min, &max).Get()
+	_, err := si.Query[artist]().Select(selects, &numResults, &min, &max).Get(db)
 
 	assert.NoError(t, err)
 	assert.Equal(t, 3, numResults)
@@ -116,7 +114,7 @@ func TestWhere(t *testing.T) {
 		{Name: "Third"},
 	})
 
-	rows, err := si.Query[artist](db).Where("name", "=", wantedName).Get()
+	rows, err := si.Query[artist]().Where("name", "=", wantedName).Get(db)
 
 	assert.NoError(t, err)
 	assert.Len(t, rows, 1)
@@ -130,7 +128,7 @@ func TestWhereContains(t *testing.T) {
 		{Name: "Mozart"},
 	})
 
-	rows, err := si.Query[artist](db).Where("name", "LIKE", "%ee%").Get()
+	rows, err := si.Query[artist]().Where("name", "LIKE", "%ee%").Get(db)
 
 	assert.NoError(t, err)
 	assert.Len(t, rows, 1)
@@ -147,11 +145,11 @@ func TestOrWhere(t *testing.T) {
 		{Name: "Michael Jackson"},
 	})
 
-	rows, err := si.Query[artist](db).
+	rows, err := si.Query[artist]().
 		Where("name", "=", name1).
 		OrWhere("name", "=", name2).
 		OrderBy("name", true).
-		Get()
+		Get(db)
 
 	assert.NoError(t, err)
 	assert.Len(t, rows, 2)
@@ -168,9 +166,9 @@ func TestWhereF(t *testing.T) {
 	})
 
 	// WHERE a AND (b OR c)
-	rows, err := si.Query[artist](db).Where("name", "ILIKE", "%m%").WhereF(func(q *si.QueryBuilder[artist]) *si.QueryBuilder[artist] {
+	rows, err := si.Query[artist]().Where("name", "ILIKE", "%m%").WhereF(func(q *si.QueryBuilder[artist]) *si.QueryBuilder[artist] {
 		return q.Where("name", "ILIKE", "%Zi%").OrWhere("name", "ILIKE", "%Wi%")
-	}).Get()
+	}).Get(db)
 
 	assert.NoError(t, err)
 	assert.Len(t, rows, 2)
@@ -185,9 +183,9 @@ func TestOrWhereF(t *testing.T) {
 	})
 
 	// WHERE a OR (b AND c)
-	rows, err := si.Query[artist](db).Where("name", "ILIKE", "%knife%").OrWhereF(func(q *si.QueryBuilder[artist]) *si.QueryBuilder[artist] {
+	rows, err := si.Query[artist]().Where("name", "ILIKE", "%knife%").OrWhereF(func(q *si.QueryBuilder[artist]) *si.QueryBuilder[artist] {
 		return q.Where("name", "ILIKE", "%daft%").Where("name", "ILIKE", "%punk%")
-	}).Get()
+	}).Get(db)
 
 	assert.NoError(t, err)
 	assert.Len(t, rows, 2)
@@ -206,8 +204,8 @@ func TestOrderBy(t *testing.T) {
 		{Name: nameD},
 	})
 
-	rowsAsc, errAsc := si.Query[artist](db).OrderBy("name", true).Get()
-	rowsDesc, errDesc := si.Query[artist](db).OrderBy("name", false).Get()
+	rowsAsc, errAsc := si.Query[artist]().OrderBy("name", true).Get(db)
+	rowsDesc, errDesc := si.Query[artist]().OrderBy("name", false).Get(db)
 
 	assert.NoError(t, errAsc)
 	assert.NoError(t, errDesc)
@@ -232,8 +230,8 @@ func TestTakeAndSkip(t *testing.T) {
 		{Name: name3},
 	})
 
-	rowsTake, errTake := si.Query[artist](db).OrderBy("name", true).Take(2).Get()
-	rowsSkip, errSkip := si.Query[artist](db).OrderBy("name", true).Skip(1).Get()
+	rowsTake, errTake := si.Query[artist]().OrderBy("name", true).Take(2).Get(db)
+	rowsSkip, errSkip := si.Query[artist]().OrderBy("name", true).Skip(1).Get(db)
 
 	assert.NoError(t, errTake)
 	assert.NoError(t, errSkip)
@@ -259,7 +257,7 @@ func TestGroupBy(t *testing.T) {
 		Sum   int
 	}
 	var results []result
-	_, err := si.Query[contact](db).GroupSelect(
+	_, err := si.Query[contact]().GroupSelect(
 		[]string{"email", "SUM(phone)"},
 		func() (any, []any) {
 			obj := result{}
@@ -267,10 +265,10 @@ func TestGroupBy(t *testing.T) {
 		}, func(a any) {
 			results = append(results, *a.(*result))
 		},
-	).GroupBy("email").OrderBy("email", true).Get()
+	).GroupBy("email").OrderBy("email", true).Get(db)
 
 	var havingResult []result
-	_, havingErr := si.Query[contact](db).GroupSelect(
+	_, havingErr := si.Query[contact]().GroupSelect(
 		[]string{"email", "SUM(phone)"},
 		func() (any, []any) {
 			obj := result{}
@@ -278,7 +276,7 @@ func TestGroupBy(t *testing.T) {
 		}, func(a any) {
 			havingResult = append(havingResult, *a.(*result))
 		},
-	).GroupBy("email").OrderBy("email", true).Having("SUM(phone)", ">", 210).Get()
+	).GroupBy("email").OrderBy("email", true).Having("SUM(phone)", ">", 210).Get(db)
 
 	assert.NoError(t, err)
 	assert.Len(t, results, 2)
@@ -293,7 +291,134 @@ func TestGroupBy(t *testing.T) {
 	assert.Equal(t, 216, havingResult[0].Sum)
 }
 
-// Test data-types on structs. bool, int, time, duration, json...
+func TestRelationHasOne(t *testing.T) {
+	db := DB(t)
+	name := "Yann Tiersen"
+	email := "yann@tiersen.com"
+	artistID := Seed(db, []artist{
+		{Name: name},
+	})
+	Seed(db, []contact{
+		{Email: email, Phone: 123, ArtistID: artistID[0]},
+	})
 
+	a, err := si.Query[artist]().First(db)
+	c, contactErr := a.Contact().First(db)
+
+	assert.NoError(t, err)
+	assert.NoError(t, contactErr)
+	assert.NotNil(t, a)
+	assert.NotNil(t, c)
+	assert.Equal(t, a.Name, name)
+	assert.Equal(t, email, c.Email)
+}
+
+func TestRelationBelongsTo(t *testing.T) {
+	db := DB(t)
+	albumName := "Brand New Day"
+	artistName := "Sting"
+	ids := Seed(db, []artist{
+		{Name: artistName},
+	})
+	Seed(db, []album{
+		{Name: albumName, ArtistID: ids[0]},
+	})
+
+	alb, err := si.Query[album]().Find(db)
+	art, artistErr := alb.Artist().Find(db)
+
+	assert.NoError(t, err)
+	assert.NoError(t, artistErr)
+	assert.NotNil(t, alb)
+	assert.NotNil(t, art)
+	assert.Equal(t, albumName, alb.Name)
+	assert.Equal(t, artistName, art.Name)
+}
+
+func TestRelationHasMany(t *testing.T) {
+	db := DB(t)
+	ids := Seed(db, []artist{
+		{Name: "Muse"},
+		{Name: "Xploding Plastix"},
+	})
+	Seed(db, []album{
+		{Name: "The Resistance", ArtistID: ids[0]},
+		{Name: "Black Holes And Revelations", ArtistID: ids[0]},
+		{Name: "Amateur Girlfriends", ArtistID: ids[1]},
+	})
+
+	art, err := si.Query[artist]().Find(db, ids[0])
+	albs, albErr := art.Albums().Get(db)
+
+	assert.NoError(t, err)
+	assert.NoError(t, albErr)
+	assert.Len(t, albs, 2)
+}
+
+func TestRelationWithHasOne(t *testing.T) {
+	db := DB(t)
+	name := "Kraftwerk"
+	ids := Seed(db, []artist{
+		{Name: name},
+	})
+	email := "robots@autobahn"
+	Seed(db, []contact{
+		{Email: email, ArtistID: ids[0]},
+	})
+
+	art, err := si.Query[artist]().With(func(m artist, r []artist) error {
+		return m.Contact().Execute(db, r)
+	}).First(db)
+	// db is not needed here since it's already loaded during the 'with' above.
+	con := art.Contact().MustFind(nil)
+
+	assert.NoError(t, err)
+	assert.Equal(t, name, art.Name)
+	assert.Equal(t, email, con.Email)
+}
+
+func TestRelationWithBelongsTo(t *testing.T) {
+
+	db := DB(t)
+	name := "Dire staits"
+	albName := "Sultans of Swing"
+	ids := Seed(db, []artist{
+		{Name: name},
+	})
+	Seed(db, []album{
+		{Name: albName, ArtistID: ids[0]},
+	})
+
+	alb, err := si.Query[album]().With(func(m album, r []album) error {
+		return m.Artist().Execute(db, r)
+	}).First(db)
+	// db is not needed here since it's already loaded during the 'with' above.
+	art := alb.Artist().MustFirst(nil)
+
+	assert.NoError(t, err)
+	assert.Equal(t, albName, alb.Name)
+	assert.Equal(t, name, art.Name)
+}
+
+func TestRelationWithHasMany(t *testing.T) {
+	db := DB(t)
+	ids := Seed(db, []artist{
+		{Name: "Metallica"},
+	})
+	Seed(db, []album{
+		{Name: "Master of puppets", ArtistID: ids[0]},
+		{Name: "Ride the Lightning", ArtistID: ids[0]},
+	})
+
+	art, err := si.Query[artist]().With(func(m artist, r []artist) error {
+		return m.Albums().Execute(db, r)
+	}).First(db)
+	// db is not needed here since it's already loaded during the 'with' above.
+	albums := art.Albums().MustGet(nil)
+
+	assert.NoError(t, err)
+	assert.Len(t, albums, 2)
+}
+
+// Test data-types on structs. bool, int, time, duration, json...
 // Test save
-// Test relations
