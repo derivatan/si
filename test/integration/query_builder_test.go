@@ -3,7 +3,6 @@
 package integration
 
 import (
-	"fmt"
 	"github.com/derivatan/si"
 	"testing"
 
@@ -255,23 +254,43 @@ func TestGroupBy(t *testing.T) {
 		{Email: "support@email.com", Phone: 109},
 	})
 
-	selects := []string{"email", "SUM(phone)"}
 	type result struct {
-		email string
-		sum   int
+		Email string
+		Sum   int
 	}
-	a := func() (any, []any) {
-		a := result{}
-		return a, []any{&a.email, &a.sum}
-	}
-	// TODO: How do i get the list in the end?
-	_, err := si.Query[contact](db).GroupSelect(selects, a).GroupBy("email").Get()
+	var results []result
+	_, err := si.Query[contact](db).GroupSelect(
+		[]string{"email", "SUM(phone)"},
+		func() (any, []any) {
+			obj := result{}
+			return &obj, []any{&obj.Email, &obj.Sum}
+		}, func(a any) {
+			results = append(results, *a.(*result))
+		},
+	).GroupBy("email").OrderBy("email", true).Get()
 
-	fmt.Println("This is the values.")
+	var havingResult []result
+	_, havingErr := si.Query[contact](db).GroupSelect(
+		[]string{"email", "SUM(phone)"},
+		func() (any, []any) {
+			obj := result{}
+			return &obj, []any{&obj.Email, &obj.Sum}
+		}, func(a any) {
+			havingResult = append(havingResult, *a.(*result))
+		},
+	).GroupBy("email").OrderBy("email", true).Having("SUM(phone)", ">", 210).Get()
 
 	assert.NoError(t, err)
+	assert.Len(t, results, 2)
+	assert.Equal(t, "info@email.com", results[0].Email)
+	assert.Equal(t, 204, results[0].Sum)
+	assert.Equal(t, "support@email.com", results[1].Email)
+	assert.Equal(t, 216, results[1].Sum)
 
-	// TODO: test having here aswell.
+	assert.NoError(t, havingErr)
+	assert.Len(t, havingResult, 1)
+	assert.Equal(t, "support@email.com", havingResult[0].Email)
+	assert.Equal(t, 216, havingResult[0].Sum)
 }
 
 // Test data-types on structs. bool, int, time, duration, json...

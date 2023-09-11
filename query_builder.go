@@ -20,7 +20,8 @@ type QueryBuilder[T Modeler] struct {
 
 	selects      []string
 	selectValues []any
-	groupValues  func() (any, []any)
+	groupScan    func() (any, []any)
+	groupReturn  func(a any)
 
 	havings  []filter
 	groupBys []string
@@ -46,10 +47,10 @@ func (q *QueryBuilder[T]) Get() ([]T, error) {
 		ti := getTypeInfo(row)
 		var err error
 		if len(q.selects) > 0 {
-			if q.groupValues != nil {
-				obj, scans := q.groupValues()
+			if q.groupScan != nil {
+				obj, scans := q.groupScan()
 				err = rows.Scan(scans...)
-				// obj -> Add this onto a list???, how to return the list?
+				q.groupReturn(obj)
 			} else {
 				err = rows.Scan(q.selectValues...)
 			}
@@ -158,13 +159,14 @@ func (q *QueryBuilder[T]) Select(selects []string, values ...any) *QueryBuilder[
 	return q
 }
 
-func (q *QueryBuilder[T]) GroupSelect(selects []string, scanArgs func() (any, []any)) *QueryBuilder[T] {
+func (q *QueryBuilder[T]) GroupSelect(selects []string, scanArgs func() (any, []any), scanReturn func(a any)) *QueryBuilder[T] {
 	if len(q.selects) > 0 {
 		log("Select values are already set. Ignoring new values.")
 		return q
 	}
 	q.selects = selects
-	q.groupValues = scanArgs
+	q.groupScan = scanArgs
+	q.groupReturn = scanReturn
 	return q
 }
 
@@ -224,8 +226,8 @@ func (q *QueryBuilder[T]) GroupBy(field string) *QueryBuilder[T] {
 	return q
 }
 
-func (q *QueryBuilder[T]) Having(condition any) *QueryBuilder[T] {
-	q.havings = append(q.havings) // TODO.
+func (q *QueryBuilder[T]) Having(column, op string, value any) *QueryBuilder[T] {
+	q.havings = append(q.havings, filter{Column: column, Operation: op, Value: value, Separator: "AND"})
 	return q
 }
 
@@ -286,7 +288,7 @@ func (q *QueryBuilder[T]) buildSelect() (string, []any) {
 	if len(q.havings) > 0 && len(q.groupBys) > 0 && specialSelect {
 		filterSql, havingFilterValues, havingParamCounter := q.buildFilters(q.havings, paramCounter)
 		query += fmt.Sprintf(" HAVING%s", filterSql)
-		filterValues = append(filterValues, havingFilterValues)
+		filterValues = append(filterValues, havingFilterValues...)
 		paramCounter += havingParamCounter
 	}
 
