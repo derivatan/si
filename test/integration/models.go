@@ -5,14 +5,18 @@ package integration
 import (
 	"github.com/derivatan/si"
 	"github.com/gofrs/uuid"
+	"time"
 )
 
 type contact struct {
 	si.Model
 
-	Email    string
-	Phone    int
-	ArtistID uuid.UUID
+	Email          string
+	Phone          int
+	RadioFrequency float64
+	LastCall       time.Time
+	OnSocialMedia  bool
+	ArtistID       uuid.UUID
 
 	artist si.RelationData[artist]
 }

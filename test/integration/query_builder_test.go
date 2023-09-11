@@ -420,5 +420,6 @@ func TestRelationWithHasMany(t *testing.T) {
 	assert.Len(t, albums, 2)
 }
 
-// Test data-types on structs. bool, int, time, duration, json...
-// Test save
+func TestUnload(t *testing.T) {
+	t.Skip("implement this")
+}
