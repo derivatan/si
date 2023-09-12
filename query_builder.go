@@ -16,8 +16,13 @@ type QueryBuilder[T Modeler] struct {
 	take    int
 	skip    int
 
-	select_      []string
+	selects      []string
 	selectValues []any
+	groupScan    func() (any, []any)
+	groupReturn  func(a any)
+
+	havings  []filter
+	groupBys []string
 }
 
 ///////////////
@@ -25,10 +30,10 @@ type QueryBuilder[T Modeler] struct {
 ///////////////
 
 // Get will Execute the query and return a list of the result.
-func (q *QueryBuilder[T]) Get() ([]T, error) {
+func (q *QueryBuilder[T]) Get(db DB) ([]T, error) {
 	query, values := q.buildSelect()
 	log(query, values)
-	rows, err := config.db.Query(query, values...)
+	rows, err := db.Query(query, values...)
 	if err != nil {
 		return nil, fmt.Errorf("si.get: execute query: %w", err)
 	}
@@ -38,10 +43,15 @@ func (q *QueryBuilder[T]) Get() ([]T, error) {
 	for rows.Next() {
 		row := new(T)
 		ti := getTypeInfo(row)
-
 		var err error
-		if len(q.select_) > 0 {
-			err = rows.Scan(q.selectValues...)
+		if len(q.selects) > 0 {
+			if q.groupScan != nil {
+				obj, scans := q.groupScan()
+				err = rows.Scan(scans...)
+				q.groupReturn(obj)
+			} else {
+				err = rows.Scan(q.selectValues...)
+			}
 		} else {
 			err = rows.Scan(ti.Values...)
 		}
@@ -59,9 +69,9 @@ func (q *QueryBuilder[T]) Get() ([]T, error) {
 }
 
 // First will execute the query and return the first element of the result
-func (q *QueryBuilder[T]) First() (*T, error) {
+func (q *QueryBuilder[T]) First(db DB) (*T, error) {
 	q.take = 1
-	result, err := q.Get()
+	result, err := q.Get(db)
 	if err != nil {
 		return nil, fmt.Errorf("si.first: %w", err)
 	}
@@ -71,11 +81,11 @@ func (q *QueryBuilder[T]) First() (*T, error) {
 // Find will return the one element in the query result.
 // This will be successful IFF there was one result.
 // The variadic parameter `id` is used to make it optional. If present, only the first element is used.
-func (q *QueryBuilder[T]) Find(id ...uuid.UUID) (*T, error) {
+func (q *QueryBuilder[T]) Find(db DB, id ...uuid.UUID) (*T, error) {
 	if len(id) >= 1 {
 		q = q.Where("id", "=", id[0])
 	}
-	result, err := q.Get()
+	result, err := q.Get(db)
 	if err != nil {
 		return nil, fmt.Errorf("si.find: %w", err)
 	}
@@ -87,8 +97,8 @@ func (q *QueryBuilder[T]) Find(id ...uuid.UUID) (*T, error) {
 }
 
 // MustGet is same as Get, but will panic on error.
-func (q *QueryBuilder[T]) MustGet() []T {
-	result, err := q.Get()
+func (q *QueryBuilder[T]) MustGet(db DB) []T {
+	result, err := q.Get(db)
 	if err != nil {
 		panic(err)
 	}
@@ -96,8 +106,8 @@ func (q *QueryBuilder[T]) MustGet() []T {
 }
 
 // MustFirst is same as First, but will panic on error.
-func (q *QueryBuilder[T]) MustFirst() *T {
-	result, err := q.First()
+func (q *QueryBuilder[T]) MustFirst(db DB) *T {
+	result, err := q.First(db)
 	if err != nil {
 		panic(err)
 	}
@@ -105,8 +115,8 @@ func (q *QueryBuilder[T]) MustFirst() *T {
 }
 
 // MustFind is same as Find, but will panic on error.
-func (q *QueryBuilder[T]) MustFind(id ...uuid.UUID) *T {
-	result, err := q.Find(id...)
+func (q *QueryBuilder[T]) MustFind(db DB, id ...uuid.UUID) *T {
+	result, err := q.Find(db, id...)
 	if err != nil {
 		panic(err)
 	}
@@ -137,9 +147,24 @@ type filter struct {
 	Sub       []filter
 }
 
-func (q *QueryBuilder[T]) Select(select_ []string, selectValues ...any) *QueryBuilder[T] {
-	q.select_ = select_
-	q.selectValues = selectValues
+func (q *QueryBuilder[T]) Select(selects []string, values ...any) *QueryBuilder[T] {
+	if len(q.selects) > 0 {
+		log("Select values are already set. Ignoring new values.")
+		return q
+	}
+	q.selects = selects
+	q.selectValues = values
+	return q
+}
+
+func (q *QueryBuilder[T]) GroupSelect(selects []string, scanArgs func() (any, []any), scanReturn func(a any)) *QueryBuilder[T] {
+	if len(q.selects) > 0 {
+		log("Select values are already set. Ignoring new values.")
+		return q
+	}
+	q.selects = selects
+	q.groupScan = scanArgs
+	q.groupReturn = scanReturn
 	return q
 }
 
@@ -194,6 +219,20 @@ func (q *QueryBuilder[T]) Skip(number int) *QueryBuilder[T] {
 	return q
 }
 
+func (q *QueryBuilder[T]) GroupBy(field string) *QueryBuilder[T] {
+	if q.groupScan == nil {
+		log("SelectGroup must be called before GroupBy. Will ignore groupby.")
+		return q
+	}
+	q.groupBys = append(q.groupBys, field)
+	return q
+}
+
+func (q *QueryBuilder[T]) Having(column, op string, value any) *QueryBuilder[T] {
+	q.havings = append(q.havings, filter{Column: column, Operation: op, Value: value, Separator: "AND"})
+	return q
+}
+
 // With will retrieve a relation, while getting the main object(s).
 func (q *QueryBuilder[T]) With(f func(m T, r []T) error) *QueryBuilder[T] {
 	q.withs = append(q.withs, f)
@@ -207,20 +246,21 @@ func (q *QueryBuilder[T]) WithDeleted() *QueryBuilder[T] {
 }
 
 func (q *QueryBuilder[T]) buildSelect() (string, []any) {
-	conf := getModelConf[T]()
-	query := "SELECT "
 	var filterValues []any
+	paramCounter := 1
+	specialSelect := len(q.selects) > 0
+	query := "SELECT "
 
 	// Select
-	if len(q.select_) > 0 {
-		query += strings.Join(q.select_, ",")
+	if specialSelect {
+		query += strings.Join(q.selects, ",")
 	} else {
 		typeInfo := getTypeInfo(new(T))
 		query += strings.Join(typeInfo.Columns, ",")
 	}
 
 	// From
-	query += fmt.Sprintf(" FROM %s", conf.Table)
+	query += fmt.Sprintf(" FROM %s", (*new(T)).GetTable())
 
 	// With Deleted
 	if !q.withDeleted {
@@ -237,9 +277,21 @@ func (q *QueryBuilder[T]) buildSelect() (string, []any) {
 	// Where
 	if len(q.filters) > 0 {
 		var filterSql string
-		paramCounter := 1
 		filterSql, filterValues, paramCounter = q.buildFilters(q.filters, paramCounter)
 		query += fmt.Sprintf(" WHERE%s", filterSql)
+	}
+
+	// Group By
+	if len(q.groupBys) > 0 && specialSelect {
+		query += " GROUP BY " + strings.Join(q.groupBys, ", ")
+	}
+
+	// Having
+	if len(q.havings) > 0 && len(q.groupBys) > 0 && specialSelect {
+		filterSql, havingFilterValues, havingParamCounter := q.buildFilters(q.havings, paramCounter)
+		query += fmt.Sprintf(" HAVING%s", filterSql)
+		filterValues = append(filterValues, havingFilterValues...)
+		paramCounter += havingParamCounter
 	}
 
 	// Order by

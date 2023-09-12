@@ -10,18 +10,6 @@ import (
 	"time"
 )
 
-// DB interface is based on the `sql.DB`.
-type DB interface {
-	Exec(query string, args ...any) (any, error)
-	Query(query string, args ...any) (Rows, error)
-}
-
-type Rows interface {
-	Next() bool
-	Scan(dest ...any) error
-	Close() error
-}
-
 type Model struct {
 	ID        *uuid.UUID `si:"id"`
 	CreatedAt time.Time  `si:"created_at"`
@@ -31,6 +19,7 @@ type Model struct {
 
 type Modeler interface {
 	GetModel() Model
+	GetTable() string
 }
 
 var (
@@ -39,37 +28,16 @@ var (
 )
 
 type secretIngredientConfig struct {
-	db      DB
-	logger  func(a ...any)
-	configs map[string]any // 'any' must be `ModelConfig[T]`
+	logger func(a ...any)
 }
 
 type ModelConfig[T Modeler] struct {
 	Table string
 }
 
-// InitSecretIngredient will initialize global config variables that is required to use si.
-func InitSecretIngredient(db DB) {
-	config = secretIngredientConfig{
-		db:      db,
-		configs: map[string]any{},
-	}
-}
-
 // SetLogger will set a logger function for debugging all queries.
 func SetLogger(f func(a ...any)) {
 	config.logger = f
-}
-
-// AddModel will add configuration for a model.
-func AddModel[T Modeler](table string) {
-	if reflect.TypeOf(new(T)).Elem().Field(0).Type != reflect.TypeOf(Model{}) {
-		panic("Model must be the first defined field on the models")
-	}
-	name := fmt.Sprintf("%T", *new(T))
-	config.configs[name] = ModelConfig[T]{
-		Table: table,
-	}
 }
 
 // Query will start a query.
@@ -82,23 +50,14 @@ func Query[T Modeler]() *QueryBuilder[T] {
 }
 
 // Save a model to the database.
-func Save[T Modeler](m *T) error {
-	return save[T](m)
+func Save[T Modeler](db DB, m *T) error {
+	return save[T](db, m)
 }
 
 func log(s ...any) {
 	if config.logger != nil {
 		config.logger(s)
 	}
-}
-
-func getModelConf[T Modeler]() ModelConfig[T] {
-	name := fmt.Sprintf("%T", *new(T))
-	result, ok := config.configs[name].(ModelConfig[T])
-	if !ok {
-		panic(fmt.Errorf("wrong type for getModelConf: %s", name))
-	}
-	return result
 }
 
 type typeInfo struct {

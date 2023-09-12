@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func save[T Modeler](m *T) error {
+func save[T Modeler](db DB, m *T) error {
 	now := time.Now()
 	// Updated at
 	reflect.ValueOf(m).Elem().Field(0).Field(2).Set(reflect.ValueOf(&now))
@@ -16,19 +16,19 @@ func save[T Modeler](m *T) error {
 		// Created at
 		reflect.ValueOf(m).Elem().Field(0).Field(1).Set(reflect.ValueOf(now))
 
-		return insert[T](m)
+		return insert[T](db, m)
 	} else {
-		return update[T](m)
+		return update[T](db, m)
 	}
 }
 
-func insert[T Modeler](m *T) error {
+func insert[T Modeler](db DB, m *T) error {
 	ti := getTypeInfo(m)
 
 	query, parameters := buildInsert[T](ti)
 	log(query, parameters)
 
-	rows, err := config.db.Query(query, parameters...)
+	rows, err := db.Query(query, parameters...)
 	if err != nil {
 		return fmt.Errorf("si.insert: execute query: %w", err)
 	}
@@ -44,7 +44,6 @@ func insert[T Modeler](m *T) error {
 }
 
 func buildInsert[T Modeler](ti typeInfo) (string, []any) {
-	conf := getModelConf[T]()
 	var values []string
 	var parameters []any
 
@@ -55,19 +54,19 @@ func buildInsert[T Modeler](ti typeInfo) (string, []any) {
 
 	query := fmt.Sprintf(
 		"INSERT INTO %s (%s) VALUES (%s) RETURNING id",
-		conf.Table,
+		(*new(T)).GetTable(),
 		strings.Join(ti.Columns[1:], ","),
 		strings.Join(values, ","),
 	)
 	return query, parameters
 }
 
-func update[T Modeler](m *T) error {
+func update[T Modeler](db DB, m *T) error {
 	ti := getTypeInfo(m)
 	query, parameters := buildUpdate[T](ti)
 	log(query, parameters)
 
-	_, err := config.db.Exec(query, parameters...)
+	_, err := db.Exec(query, parameters...)
 	if err != nil {
 		return fmt.Errorf("si.update: execute query: %w", err)
 	}
@@ -75,7 +74,6 @@ func update[T Modeler](m *T) error {
 }
 
 func buildUpdate[T Modeler](ti typeInfo) (string, []any) {
-	conf := getModelConf[T]()
 
 	var columns []string
 	var parameters []any
@@ -86,7 +84,7 @@ func buildUpdate[T Modeler](ti typeInfo) (string, []any) {
 
 	parameters = append(parameters, ti.Values[0])
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d",
-		conf.Table,
+		(*new(T)).GetTable(),
 		strings.Join(columns, ","),
 		len(ti.Columns),
 	)
