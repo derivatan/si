@@ -23,13 +23,12 @@ type Modeler interface {
 }
 
 var (
-	config                secretIngredientConfig // TODO: remove this?
+	config                secretIngredientConfig
 	ResourceNotFoundError = errors.New("resource not found")
 )
 
 type secretIngredientConfig struct {
-	logger  func(a ...any)
-	configs map[string]any // 'any' must be `ModelConfig[T]`
+	logger func(a ...any)
 }
 
 type ModelConfig[T Modeler] struct {
