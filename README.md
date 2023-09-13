@@ -54,22 +54,22 @@ func (a Album) GetTable() string {
     return "albums"
 }
 
-func (a Album) Artist() si.Relation[album, artist] {
-    return si.BelongsTo[album, artist](a, "artist", func(a *album) *si.RelationData[artist] {
+func (a Album) Artist() si.Relation[Album, Artist] {
+    return si.BelongsTo[Album, Artist](a, "artist", func(a *Album) *si.RelationData[Artist] {
         return &a.artist
     })
 }
 ```
 
 A relationship is defined by two things.
-* An **unexported** field with the type `si.RelationData[T]`
+* An **unexported** field with the type `si.RelationData[To]`
 * An exported function that returns a `si.Relation[From, To]`
 
-The field is only for si:s internal use and should not be used or modified in any way. To get a relation you must use the function as a query builder.
+The field is only for _si_:s internal use and should not be used or modified in any way. To get a relation you must use the function as a query builder.
 
 
 ### Database setup
-In order to be completely agnostic about the database, si uses these [interfaces](https://github.com/derivatan/si/blob/main/db.go) for database communication.
+In order to be completely agnostic about the database, _si_ uses these [interfaces](https://github.com/derivatan/si/blob/main/db.go) for database communication.
 This is based on the `sql.DB`, but can easily be implemented with whatever you want to use. A simple example of such an implementaiton can be found in [`sql_wrap.go`](https://github.com/derivatan/si/blob/main/sql_wrap.go)
 
 
@@ -77,9 +77,20 @@ This is based on the `sql.DB`, but can easily be implemented with whatever you w
 
 * `si.Query[T]()` is the main entry point for retrieving data from the database.
 
-  Example, Get all albums with that start with the leter 'a'.
+  Examples
   ```go
-  albums, err := si.Query[album]().Where("name", "ILIKE", "a%").OrderBy("name", true).Get(db)
+	// Get alla albums that start with the letter 'a'.
+	albums, err := si.Query[Album]().Where("name", "ILIKE", "a%").OrderBy("name", true).Get(db)
+	// Get the Artist from an Album.
+	artist, err := albums[0].Artist().Find(db)
+
+	// Get all Artist, with all their albums. This will only execute two queries.
+	artists, err := si.Query[Artist]().With(func(a Artist, r []Artist) error {
+		return a.Albums().Execute(db, r)
+	}).Get(db)
+	// Get the albums from an Artist, since irs already fetched from the database, it does not require a `db`, and there can be no error.
+	albums := artists[0].Albums().MustFind(nil)
+
   ```
 
 * `si.Save(model)` is used to create or update a model, with the values upon the model.
