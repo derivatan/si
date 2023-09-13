@@ -11,15 +11,15 @@ type QueryBuilder[T Modeler] struct {
 	withs       []func(m T, r []T) error
 	withDeleted bool
 
+	selects    []string
+	selectScan func(scan func(...any))
+
+	joins []join[T]
+
 	filters []filter
 	orderBy []orderBy
 	take    int
 	skip    int
-
-	selects      []string
-	selectValues []any
-	groupScan    func() (any, []any)
-	groupReturn  func(a any)
 
 	havings  []filter
 	groupBys []string
@@ -45,13 +45,9 @@ func (q *QueryBuilder[T]) Get(db DB) ([]T, error) {
 		ti := getTypeInfo(row)
 		var err error
 		if len(q.selects) > 0 {
-			if q.groupScan != nil {
-				obj, scans := q.groupScan()
-				err = rows.Scan(scans...)
-				q.groupReturn(obj)
-			} else {
-				err = rows.Scan(q.selectValues...)
-			}
+			q.selectScan(func(scan ...any) {
+				err = rows.Scan(scan...)
+			})
 		} else {
 			err = rows.Scan(ti.Values...)
 		}
@@ -147,24 +143,25 @@ type filter struct {
 	Sub       []filter
 }
 
-func (q *QueryBuilder[T]) Select(selects []string, values ...any) *QueryBuilder[T] {
+func (q *QueryBuilder[T]) Select(selects []string, selectScan func(scan func(...any))) *QueryBuilder[T] {
 	if len(q.selects) > 0 {
 		log("Select values are already set. Ignoring new values.")
 		return q
 	}
 	q.selects = selects
-	q.selectValues = values
+	q.selectScan = selectScan
 	return q
 }
 
-func (q *QueryBuilder[T]) GroupSelect(selects []string, scanArgs func() (any, []any), scanReturn func(a any)) *QueryBuilder[T] {
-	if len(q.selects) > 0 {
-		log("Select values are already set. Ignoring new values.")
-		return q
-	}
-	q.selects = selects
-	q.groupScan = scanArgs
-	q.groupReturn = scanReturn
+// TODO: join types. INNER|LEFT|RIGHT|FULL|
+type join[T Modeler] struct {
+	Table     string
+	Condition func(q *QueryBuilder[T]) *QueryBuilder[T]
+}
+
+// THIS IS A 'WORK IN PROFRESS'
+func (q *QueryBuilder[T]) JoinWIP(table string, f func(q *QueryBuilder[T]) *QueryBuilder[T]) *QueryBuilder[T] {
+	q.joins = append(q.joins, join[T]{Table: table, Condition: f})
 	return q
 }
 
@@ -220,16 +217,31 @@ func (q *QueryBuilder[T]) Skip(number int) *QueryBuilder[T] {
 }
 
 func (q *QueryBuilder[T]) GroupBy(field string) *QueryBuilder[T] {
-	if q.groupScan == nil {
-		log("SelectGroup must be called before GroupBy. Will ignore groupby.")
-		return q
-	}
 	q.groupBys = append(q.groupBys, field)
 	return q
 }
 
 func (q *QueryBuilder[T]) Having(column, op string, value any) *QueryBuilder[T] {
 	q.havings = append(q.havings, filter{Column: column, Operation: op, Value: value, Separator: "AND"})
+	return q
+}
+
+func (q *QueryBuilder[T]) OrHaving(column, op string, value any) *QueryBuilder[T] {
+	q.havings = append(q.havings, filter{Column: column, Operation: op, Value: value, Separator: "OR"})
+	return q
+}
+
+func (q *QueryBuilder[T]) HavingF(f func(q *QueryBuilder[T]) *QueryBuilder[T]) *QueryBuilder[T] {
+	subQ := &QueryBuilder[T]{}
+	subQ = f(subQ)
+	q.havings = append(q.havings, filter{Separator: "AND", Sub: subQ.filters})
+	return q
+}
+
+func (q *QueryBuilder[T]) OrHavingF(f func(q *QueryBuilder[T]) *QueryBuilder[T]) *QueryBuilder[T] {
+	subQ := &QueryBuilder[T]{}
+	subQ = f(subQ)
+	q.havings = append(q.havings, filter{Separator: "OR", Sub: subQ.filters})
 	return q
 }
 
@@ -261,6 +273,9 @@ func (q *QueryBuilder[T]) buildSelect() (string, []any) {
 
 	// From
 	query += fmt.Sprintf(" FROM %s", (*new(T)).GetTable())
+
+	// Joins
+	// TODO
 
 	// With Deleted
 	if !q.withDeleted {
