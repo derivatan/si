@@ -11,7 +11,7 @@ import (
 // |------|     | T  |
 // | ID   |     |----|
 // | T_ID | --> | ID |
-func BelongsTo[F, T Modeler](model F, fieldName string, relationDataFunc func(f *F) *RelationData[T]) *Relation[F, T] {
+func BelongsTo[F, T Modeler](model F, refFieldName, fieldName string, relationDataFunc func(f *F) *RelationData[T]) *Relation[F, T] {
 	fromType := reflect.TypeOf(new(F))
 	toType := reflect.TypeOf(new(T))
 	relationFieldName := getRelationFieldName(fromType, toType, fieldName, true)
@@ -33,7 +33,6 @@ func BelongsTo[F, T Modeler](model F, fieldName string, relationDataFunc func(f 
 }
 
 type belongsToConf[F, T Modeler] struct {
-	set     func(*F, *T)
 	idField func(F) uuid.UUID
 }
 

@@ -281,18 +281,22 @@ func (q *Q[T]) buildSelect() (string, []any) {
 	paramCounter := 1
 	specialSelect := len(q.selects) > 0
 	t := new(T)
+	table := (*t).GetTable()
 	query := "SELECT "
 
 	// Select
 	if specialSelect {
 		query += strings.Join(q.selects, ",")
 	} else {
-		typeInfo := getTypeInfo(t)
-		query += strings.Join(typeInfo.Columns, ",")
+		var list []string
+		for _, c := range getTypeInfo(t).Columns {
+			list = append(list, fmt.Sprintf("%s.%s", table, c))
+		}
+		query += strings.Join(list, ",")
 	}
 
 	// From
-	query += fmt.Sprintf(" FROM %s", (*t).GetTable())
+	query += fmt.Sprintf(" FROM %s", table)
 
 	// Joins
 	for _, jf := range q.joins2 {
@@ -389,7 +393,7 @@ func (q *Q[T]) buildFilters(filters []filter, paramCounter int) (string, []any, 
 			continue
 		}
 		if f.Operation == "IN" {
-			for _, elem := range f.Value.([]any) {
+			for _, elem := range f.Value.([]string) {
 				filterValues = append(filterValues, elem)
 				parameters = append(parameters, fmt.Sprintf("$%d", paramCounter))
 				paramCounter += 1

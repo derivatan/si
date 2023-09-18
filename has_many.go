@@ -11,7 +11,7 @@ import (
 // | F    |     |------|
 // |------|     | ID   |
 // | ID   | <-- | F_ID |
-func HasMany[F, T Modeler](model F, fieldName string, relationDataFunc func(f *F) *RelationData[T]) *Relation[F, T] {
+func HasMany[F, T Modeler](model F, refFieldName, fieldName string, relationDataFunc func(f *F) *RelationData[T]) *Relation[F, T] {
 	fromType := reflect.TypeOf(new(F))
 	toType := reflect.TypeOf(new(T))
 	relationFieldName := getRelationFieldName(fromType, toType, fieldName, false)
@@ -27,7 +27,6 @@ func HasMany[F, T Modeler](model F, fieldName string, relationDataFunc func(f *F
 			idValue: func(t T) uuid.UUID {
 				tVal := reflect.ValueOf(t)
 				return tVal.FieldByName(relationFieldName).Interface().(uuid.UUID)
-				//return *t.getModelConf().ID
 			},
 		},
 	}
