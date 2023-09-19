@@ -171,8 +171,16 @@ func (r *Relation[F, T]) Join(joinType JoinType) *Join {
 	t := new(T)
 	return &Join{
 		// TODO: IN the test case:
+		// Album -> artist
 		//  relationtype = belongsto
-		//  Q i want: FROM albums INNER JOIN artists on albums.artist_id = artists.id
+		//  Q i want: FROM albums INNER JOIN artists ON albums.artist_id = artists.id
+
+		//  relationtype = hasone //////
+		//  Q i want: FROM artist INNER JOIN contacts ON artist.id = contact.artist_id
+
+		//  Rleationtye = hasmany
+		//  Q i want: FROM artist INNER JOIN albums ON artist.id = albums.artist_id
+
 		JoinType: joinType,
 		Table:    (*t).GetTable(),
 		Alias:    "",
