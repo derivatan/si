@@ -1,6 +1,7 @@
 package si
 
 import (
+	"fmt"
 	"github.com/gofrs/uuid"
 )
 
@@ -8,8 +9,8 @@ import (
 // F is `from` and T is `to`, so the relation is defined as seen from ´F´.
 type Relation[F, T Modeler] struct {
 	model        F
-	query        *QueryBuilder[T]
-	get          *QueryBuilder[T]
+	query        *Q[T]
+	get          *Q[T]
 	relationData func(f *F) *RelationData[T]
 	relationType relationType[F, T]
 }
@@ -74,10 +75,10 @@ func (r *Relation[F, T]) MustFind(db DB, id ...uuid.UUID) *T {
 	return result
 }
 
-func (r *Relation[F, T]) innerFilter() *QueryBuilder[T] {
+func (r *Relation[F, T]) innerFilter() *Q[T] {
 	result := r.get
 	if len(r.query.filters) > 0 {
-		result = result.WhereF(func(q *QueryBuilder[T]) *QueryBuilder[T] {
+		result = result.WhereF(func(q *Q[T]) *Q[T] {
 			return r.query
 		})
 	}
@@ -94,12 +95,12 @@ func (r *Relation[F, T]) OrWhere(column, op string, value any) *Relation[F, T] {
 	return r
 }
 
-func (r *Relation[F, T]) WhereF(f func(q *QueryBuilder[T]) *QueryBuilder[T]) *Relation[F, T] {
+func (r *Relation[F, T]) WhereF(f func(q *Q[T]) *Q[T]) *Relation[F, T] {
 	r.query = r.query.WhereF(f)
 	return r
 }
 
-func (r *Relation[F, T]) OrWhereF(f func(q *QueryBuilder[T]) *QueryBuilder[T]) *Relation[F, T] {
+func (r *Relation[F, T]) OrWhereF(f func(q *Q[T]) *Q[T]) *Relation[F, T] {
 	r.query = r.query.OrWhereF(f)
 	return r
 }
@@ -140,7 +141,7 @@ func (r *Relation[F, T]) Execute(db DB, result []F) error {
 
 	query := Query[T]().Where(r.relationType.queryColumn(), "IN", ids)
 	if len(r.query.filters) > 0 {
-		query = query.WhereF(func(q *QueryBuilder[T]) *QueryBuilder[T] {
+		query = query.WhereF(func(q *Q[T]) *Q[T] {
 			return r.query
 		})
 	}
@@ -166,8 +167,28 @@ func (r *Relation[F, T]) Execute(db DB, result []F) error {
 	return nil
 }
 
+func (r *Relation[F, T]) Join(joinType JoinType) *JoinConf {
+	f := new(F)
+	t := new(T)
+	j1, j2 := r.relationType.joinColumns()
+	return &JoinConf{
+		JoinType: joinType,
+		Table:    (*t).GetTable(),
+		Alias:    "",
+		Condition: []filter{
+			{
+				Column:    fmt.Sprintf("%s.%s", (*f).GetTable(), j1),
+				Operation: "=",
+				Value:     Raw(fmt.Sprintf("%s.%s", (*t).GetTable(), j2)),
+				Separator: "AND",
+			},
+		},
+	}
+}
+
 type relationType[F, T Modeler] interface {
 	collectID(F) uuid.UUID
 	groupBy(T) uuid.UUID
 	queryColumn() string
+	joinColumns() (string, string)
 }

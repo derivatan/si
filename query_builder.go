@@ -7,14 +7,13 @@ import (
 	"strings"
 )
 
-type QueryBuilder[T Modeler] struct {
+type Q[T Modeler] struct {
 	withs       []func(m T, r []T) error
 	withDeleted bool
 
 	selects    []string
 	selectScan func(scan func(...any))
-
-	joins []join[T]
+	joins      []func(t T) *JoinConf
 
 	filters []filter
 	orderBy []orderBy
@@ -23,6 +22,10 @@ type QueryBuilder[T Modeler] struct {
 
 	havings  []filter
 	groupBys []string
+
+	//Used during building
+	argsCounter int
+	args        []any
 }
 
 ///////////////
@@ -30,10 +33,10 @@ type QueryBuilder[T Modeler] struct {
 ///////////////
 
 // Get will Execute the query and return a list of the result.
-func (q *QueryBuilder[T]) Get(db DB) ([]T, error) {
-	query, values := q.buildSelect()
-	log(query, values)
-	rows, err := db.Query(query, values...)
+func (q *Q[T]) Get(db DB) ([]T, error) {
+	query := q.buildSelect()
+	log(query, q.args)
+	rows, err := db.Query(query, q.args...)
 	if err != nil {
 		return nil, fmt.Errorf("si.get: execute query: %w", err)
 	}
@@ -65,7 +68,7 @@ func (q *QueryBuilder[T]) Get(db DB) ([]T, error) {
 }
 
 // First will execute the query and return the first element of the result
-func (q *QueryBuilder[T]) First(db DB) (*T, error) {
+func (q *Q[T]) First(db DB) (*T, error) {
 	q.take = 1
 	result, err := q.Get(db)
 	if err != nil {
@@ -77,7 +80,7 @@ func (q *QueryBuilder[T]) First(db DB) (*T, error) {
 // Find will return the one element in the query result.
 // This will be successful IFF there was one result.
 // The variadic parameter `id` is used to make it optional. If present, only the first element is used.
-func (q *QueryBuilder[T]) Find(db DB, id ...uuid.UUID) (*T, error) {
+func (q *Q[T]) Find(db DB, id ...uuid.UUID) (*T, error) {
 	if len(id) >= 1 {
 		q = q.Where("id", "=", id[0])
 	}
@@ -93,7 +96,7 @@ func (q *QueryBuilder[T]) Find(db DB, id ...uuid.UUID) (*T, error) {
 }
 
 // MustGet is same as Get, but will panic on error.
-func (q *QueryBuilder[T]) MustGet(db DB) []T {
+func (q *Q[T]) MustGet(db DB) []T {
 	result, err := q.Get(db)
 	if err != nil {
 		panic(err)
@@ -102,7 +105,7 @@ func (q *QueryBuilder[T]) MustGet(db DB) []T {
 }
 
 // MustFirst is same as First, but will panic on error.
-func (q *QueryBuilder[T]) MustFirst(db DB) *T {
+func (q *Q[T]) MustFirst(db DB) *T {
 	result, err := q.First(db)
 	if err != nil {
 		panic(err)
@@ -111,7 +114,7 @@ func (q *QueryBuilder[T]) MustFirst(db DB) *T {
 }
 
 // MustFind is same as Find, but will panic on error.
-func (q *QueryBuilder[T]) MustFind(db DB, id ...uuid.UUID) *T {
+func (q *Q[T]) MustFind(db DB, id ...uuid.UUID) *T {
 	result, err := q.Find(db, id...)
 	if err != nil {
 		panic(err)
@@ -119,7 +122,7 @@ func (q *QueryBuilder[T]) MustFind(db DB, id ...uuid.UUID) *T {
 	return result
 }
 
-func (q *QueryBuilder[T]) executeWith(results []T) error {
+func (q *Q[T]) executeWith(results []T) error {
 	for _, with := range q.withs {
 		var dummy T
 		err := with(dummy, results)
@@ -143,7 +146,9 @@ type filter struct {
 	Sub       []filter
 }
 
-func (q *QueryBuilder[T]) Select(selects []string, selectScan func(scan func(...any))) *QueryBuilder[T] {
+type Raw string
+
+func (q *Q[T]) Select(selects []string, selectScan func(scan func(...any))) *Q[T] {
 	if len(q.selects) > 0 {
 		log("Select values are already set. Ignoring new values.")
 		return q
@@ -153,41 +158,52 @@ func (q *QueryBuilder[T]) Select(selects []string, selectScan func(scan func(...
 	return q
 }
 
-// TODO: join types. INNER|LEFT|RIGHT|FULL|
-type join[T Modeler] struct {
-	Table     string
-	Condition func(q *QueryBuilder[T]) *QueryBuilder[T]
+type JoinType string
+
+const (
+	INNER JoinType = "INNER"
+	LEFT           = "LEFT"
+	RIGHT          = "RIGHT"
+	FULL           = "FULL"
+)
+
+type JoinConf struct {
+	JoinType JoinType
+	Table    string
+	Alias    string
+	// Extra condition?
+	Condition []filter // func(q *Q[T]) *Q[T]
 }
 
-// THIS IS A 'WORK IN PROFRESS'
-func (q *QueryBuilder[T]) JoinWIP(table string, f func(q *QueryBuilder[T]) *QueryBuilder[T]) *QueryBuilder[T] {
-	q.joins = append(q.joins, join[T]{Table: table, Condition: f})
+// Join adds a join on the query. Can be used with `join` a `Relation` to automate the condition.
+func (q *Q[T]) Join(f func(t T) *JoinConf) *Q[T] {
+	q.joins = append(q.joins, f)
 	return q
 }
 
 // Where adds a condition, separated by `AND`
-func (q *QueryBuilder[T]) Where(column, op string, value any) *QueryBuilder[T] {
+func (q *Q[T]) Where(column, op string, value any) *Q[T] {
 	q.filters = append(q.filters, filter{Column: column, Operation: op, Value: value, Separator: "AND"})
 	return q
 }
 
 // OrWhere adds a condition, separated by `OR`
-func (q *QueryBuilder[T]) OrWhere(column, op string, value any) *QueryBuilder[T] {
+func (q *Q[T]) OrWhere(column, op string, value any) *Q[T] {
 	q.filters = append(q.filters, filter{Column: column, Operation: op, Value: value, Separator: "OR"})
 	return q
 }
 
 // WhereF add a condition in parentheses, separated by `AND`
-func (q *QueryBuilder[T]) WhereF(f func(q *QueryBuilder[T]) *QueryBuilder[T]) *QueryBuilder[T] {
-	subQ := &QueryBuilder[T]{}
+func (q *Q[T]) WhereF(f func(q *Q[T]) *Q[T]) *Q[T] {
+	subQ := &Q[T]{}
 	subQ = f(subQ)
 	q.filters = append(q.filters, filter{Separator: "AND", Sub: subQ.filters})
 	return q
 }
 
 // OrWhereF add a condition in parentheses, separated by `OR`
-func (q *QueryBuilder[T]) OrWhereF(f func(q *QueryBuilder[T]) *QueryBuilder[T]) *QueryBuilder[T] {
-	subQ := &QueryBuilder[T]{}
+func (q *Q[T]) OrWhereF(f func(q *Q[T]) *Q[T]) *Q[T] {
+	subQ := &Q[T]{}
 	subQ = f(subQ)
 	q.filters = append(q.filters, filter{Separator: "OR", Sub: subQ.filters})
 	return q
@@ -199,86 +215,96 @@ type orderBy struct {
 }
 
 // OrderBy adds an order to the query.
-func (q *QueryBuilder[T]) OrderBy(column string, asc bool) *QueryBuilder[T] {
+func (q *Q[T]) OrderBy(column string, asc bool) *Q[T] {
 	q.orderBy = append(q.orderBy, orderBy{column, asc})
 	return q
 }
 
 // Take will limit the result to the given number.
-func (q *QueryBuilder[T]) Take(number int) *QueryBuilder[T] {
+func (q *Q[T]) Take(number int) *Q[T] {
 	q.take = number
 	return q
 }
 
 // Skip will remove the first `number`of the result.
-func (q *QueryBuilder[T]) Skip(number int) *QueryBuilder[T] {
+func (q *Q[T]) Skip(number int) *Q[T] {
 	q.skip = number
 	return q
 }
 
-func (q *QueryBuilder[T]) GroupBy(field string) *QueryBuilder[T] {
+func (q *Q[T]) GroupBy(field string) *Q[T] {
 	q.groupBys = append(q.groupBys, field)
 	return q
 }
 
-func (q *QueryBuilder[T]) Having(column, op string, value any) *QueryBuilder[T] {
+func (q *Q[T]) Having(column, op string, value any) *Q[T] {
 	q.havings = append(q.havings, filter{Column: column, Operation: op, Value: value, Separator: "AND"})
 	return q
 }
 
-func (q *QueryBuilder[T]) OrHaving(column, op string, value any) *QueryBuilder[T] {
+func (q *Q[T]) OrHaving(column, op string, value any) *Q[T] {
 	q.havings = append(q.havings, filter{Column: column, Operation: op, Value: value, Separator: "OR"})
 	return q
 }
 
-func (q *QueryBuilder[T]) HavingF(f func(q *QueryBuilder[T]) *QueryBuilder[T]) *QueryBuilder[T] {
-	subQ := &QueryBuilder[T]{}
+func (q *Q[T]) HavingF(f func(q *Q[T]) *Q[T]) *Q[T] {
+	subQ := &Q[T]{}
 	subQ = f(subQ)
 	q.havings = append(q.havings, filter{Separator: "AND", Sub: subQ.filters})
 	return q
 }
 
-func (q *QueryBuilder[T]) OrHavingF(f func(q *QueryBuilder[T]) *QueryBuilder[T]) *QueryBuilder[T] {
-	subQ := &QueryBuilder[T]{}
+func (q *Q[T]) OrHavingF(f func(q *Q[T]) *Q[T]) *Q[T] {
+	subQ := &Q[T]{}
 	subQ = f(subQ)
 	q.havings = append(q.havings, filter{Separator: "OR", Sub: subQ.filters})
 	return q
 }
 
 // With will retrieve a relation, while getting the main object(s).
-func (q *QueryBuilder[T]) With(f func(m T, r []T) error) *QueryBuilder[T] {
+func (q *Q[T]) With(f func(m T, r []T) error) *Q[T] {
 	q.withs = append(q.withs, f)
 	return q
 }
 
 // WithDeleted will ignore the deleted timestamp.
-func (q *QueryBuilder[T]) WithDeleted() *QueryBuilder[T] {
+func (q *Q[T]) WithDeleted() *Q[T] {
+	if !config.useDeletedAt {
+		log("WithDeleted does nothing if the logs are disabled.")
+	}
 	q.withDeleted = true
 	return q
 }
 
-func (q *QueryBuilder[T]) buildSelect() (string, []any) {
-	var filterValues []any
-	paramCounter := 1
+func (q *Q[T]) buildSelect() string {
 	specialSelect := len(q.selects) > 0
+	t := new(T)
+	table := (*t).GetTable()
 	query := "SELECT "
 
 	// Select
 	if specialSelect {
 		query += strings.Join(q.selects, ",")
 	} else {
-		typeInfo := getTypeInfo(new(T))
-		query += strings.Join(typeInfo.Columns, ",")
+		var list []string
+		for _, c := range getTypeInfo(t).Columns {
+			list = append(list, fmt.Sprintf("%s.%s", table, c))
+		}
+		query += strings.Join(list, ",")
 	}
 
 	// From
-	query += fmt.Sprintf(" FROM %s", (*new(T)).GetTable())
+	query += fmt.Sprintf(" FROM %s", table)
 
 	// Joins
-	// TODO
+	for _, jf := range q.joins {
+		j := jf(*t)
+		condition := q.buildFilters(j.Condition)
+		query += fmt.Sprintf(" %s JOIN %s ON%s", j.JoinType, j.Table, condition)
+	}
 
 	// With Deleted
-	if !q.withDeleted {
+	if config.useDeletedAt && !q.withDeleted {
 		otherFilters := q.filters
 		q.filters = []filter{{Column: "deleted_at", Operation: "IS", Value: nil}}
 		if len(otherFilters) > 0 {
@@ -291,8 +317,7 @@ func (q *QueryBuilder[T]) buildSelect() (string, []any) {
 
 	// Where
 	if len(q.filters) > 0 {
-		var filterSql string
-		filterSql, filterValues, paramCounter = q.buildFilters(q.filters, paramCounter)
+		filterSql := q.buildFilters(q.filters)
 		query += fmt.Sprintf(" WHERE%s", filterSql)
 	}
 
@@ -303,10 +328,8 @@ func (q *QueryBuilder[T]) buildSelect() (string, []any) {
 
 	// Having
 	if len(q.havings) > 0 && len(q.groupBys) > 0 && specialSelect {
-		filterSql, havingFilterValues, havingParamCounter := q.buildFilters(q.havings, paramCounter)
+		filterSql := q.buildFilters(q.havings)
 		query += fmt.Sprintf(" HAVING%s", filterSql)
-		filterValues = append(filterValues, havingFilterValues...)
-		paramCounter += havingParamCounter
 	}
 
 	// Order by
@@ -335,42 +358,51 @@ func (q *QueryBuilder[T]) buildSelect() (string, []any) {
 		query += fmt.Sprintf(" OFFSET %d ", q.skip)
 	}
 
-	return query, filterValues
+	return query
 }
 
-func (q *QueryBuilder[T]) buildFilters(filters []filter, paramCounter int) (string, []any, int) {
+func (q *Q[T]) buildFilters(filters []filter) string {
 	var query string
-	var filterValues []any
-	for i, filter := range filters {
+	for i, f := range filters {
 		if i != 0 {
-			query += fmt.Sprintf(" %s", filter.Separator)
+			query += fmt.Sprintf(" %s", f.Separator)
 		}
-		if filter.Sub != nil {
-			subSql, subFilterValues, pC := q.buildFilters(filter.Sub, paramCounter)
-			paramCounter = pC
-			filterValues = append(filterValues, subFilterValues...)
+
+		// Handle nested parentheses
+		if f.Sub != nil {
+			subSql := q.buildFilters(f.Sub)
 			query += fmt.Sprintf(" (%s)", subSql)
 			continue
 		}
 
-		if filter.Operation == "IS" && filter.Value == nil {
-			query += fmt.Sprintf(" %s IS NULL", filter.Column)
+		// Handle IS NULL.
+		if f.Operation == "IS" && f.Value == nil {
+			query += fmt.Sprintf(" %s IS NULL", f.Column)
 			continue
 		}
+
+		// Handle Raw condition
+		if _, ok := f.Value.(Raw); ok {
+			query += fmt.Sprintf(" %s %s %s", f.Column, f.Operation, f.Value)
+			continue
+		}
+
+		// Handle IN list
 		parameters := []string{}
-		if filter.Operation == "IN" {
-			for _, elem := range filter.Value.([]string) {
-				filterValues = append(filterValues, elem)
-				parameters = append(parameters, fmt.Sprintf("$%d", paramCounter))
-				paramCounter += 1
+		if f.Operation == "IN" {
+			for _, elem := range f.Value.([]string) {
+				q.args = append(q.args, elem)
+				q.argsCounter += 1
+				parameters = append(parameters, fmt.Sprintf("$%d", q.argsCounter))
 			}
-			query += fmt.Sprintf(" %s IN (%s)", filter.Column, strings.Join(parameters, ","))
+			query += fmt.Sprintf(" %s IN (%s)", f.Column, strings.Join(parameters, ","))
 			continue
-		} else {
-			filterValues = append(filterValues, filter.Value)
 		}
-		query += fmt.Sprintf(" %s %s $%d", filter.Column, filter.Operation, paramCounter)
-		paramCounter += 1
+
+		q.args = append(q.args, f.Value)
+		// Default condition handling.
+		q.argsCounter += 1
+		query += fmt.Sprintf(" %s %s $%d", f.Column, f.Operation, q.argsCounter)
 	}
-	return query, filterValues, paramCounter
+	return query
 }

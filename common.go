@@ -28,7 +28,8 @@ var (
 )
 
 type secretIngredientConfig struct {
-	logger func(a ...any)
+	logger       func(a ...any)
+	useDeletedAt bool
 }
 
 type ModelConfig[T Modeler] struct {
@@ -40,10 +41,15 @@ func SetLogger(f func(a ...any)) {
 	config.logger = f
 }
 
+// UseDeletedAt can disable or enable the usage of deleted_at in query generations.
+func UseDeletedAt(enabled bool) {
+	config.useDeletedAt = enabled
+}
+
 // Query will start a query.
 // Main starting point for retrieving objects.
-func Query[T Modeler]() *QueryBuilder[T] {
-	return &QueryBuilder[T]{
+func Query[T Modeler]() *Q[T] {
+	return &Q[T]{
 		filters: []filter{},
 		orderBy: []orderBy{},
 	}
