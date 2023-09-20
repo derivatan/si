@@ -13,9 +13,7 @@ type Q[T Modeler] struct {
 
 	selects    []string
 	selectScan func(scan func(...any))
-
-	joins  []Join
-	joins2 []func(t T) *Join
+	joins      []func(t T) *JoinConf
 
 	filters []filter
 	orderBy []orderBy
@@ -24,6 +22,10 @@ type Q[T Modeler] struct {
 
 	havings  []filter
 	groupBys []string
+
+	//Used during building
+	argsCounter int
+	args        []any
 }
 
 ///////////////
@@ -32,9 +34,9 @@ type Q[T Modeler] struct {
 
 // Get will Execute the query and return a list of the result.
 func (q *Q[T]) Get(db DB) ([]T, error) {
-	query, values := q.buildSelect()
-	log(query, values)
-	rows, err := db.Query(query, values...)
+	query := q.buildSelect()
+	log(query, q.args)
+	rows, err := db.Query(query, q.args...)
 	if err != nil {
 		return nil, fmt.Errorf("si.get: execute query: %w", err)
 	}
@@ -165,7 +167,7 @@ const (
 	FULL           = "FULL"
 )
 
-type Join struct {
+type JoinConf struct {
 	JoinType JoinType
 	Table    string
 	Alias    string
@@ -173,14 +175,9 @@ type Join struct {
 	Condition []filter // func(q *Q[T]) *Q[T]
 }
 
-// THIS IS A 'WORK IN PROFRESS'
-func (q *Q[T]) JoinWIP(table string, f func(q *Q[T]) *Q[T]) *Q[T] {
-	q.joins = append(q.joins, Join{Table: table})
-	return q
-}
-
-func (q *Q[T]) Join2(f func(t T) *Join) *Q[T] {
-	q.joins2 = append(q.joins2, f)
+// Join adds a join on the query. Can be used with `join` a `Relation` to automate the condition.
+func (q *Q[T]) Join(f func(t T) *JoinConf) *Q[T] {
+	q.joins = append(q.joins, f)
 	return q
 }
 
@@ -272,13 +269,14 @@ func (q *Q[T]) With(f func(m T, r []T) error) *Q[T] {
 
 // WithDeleted will ignore the deleted timestamp.
 func (q *Q[T]) WithDeleted() *Q[T] {
+	if !config.useDeletedAt {
+		log("WithDeleted does nothing if the logs are disabled.")
+	}
 	q.withDeleted = true
 	return q
 }
 
-func (q *Q[T]) buildSelect() (string, []any) {
-	var filterValues []any
-	paramCounter := 1
+func (q *Q[T]) buildSelect() string {
 	specialSelect := len(q.selects) > 0
 	t := new(T)
 	table := (*t).GetTable()
@@ -299,16 +297,14 @@ func (q *Q[T]) buildSelect() (string, []any) {
 	query += fmt.Sprintf(" FROM %s", table)
 
 	// Joins
-	for _, jf := range q.joins2 {
+	for _, jf := range q.joins {
 		j := jf(*t)
-		condition, joinValues, joinParamCounter := q.buildFilters(j.Condition, paramCounter)
-		paramCounter += joinParamCounter
-		filterValues = append(filterValues, joinValues...)
-		query += fmt.Sprintf(" %s JOIN %s on %s", j.JoinType, j.Table, condition)
+		condition := q.buildFilters(j.Condition)
+		query += fmt.Sprintf(" %s JOIN %s ON%s", j.JoinType, j.Table, condition)
 	}
 
 	// With Deleted
-	if !q.withDeleted {
+	if config.useDeletedAt && !q.withDeleted {
 		otherFilters := q.filters
 		q.filters = []filter{{Column: "deleted_at", Operation: "IS", Value: nil}}
 		if len(otherFilters) > 0 {
@@ -321,8 +317,7 @@ func (q *Q[T]) buildSelect() (string, []any) {
 
 	// Where
 	if len(q.filters) > 0 {
-		var filterSql string
-		filterSql, filterValues, paramCounter = q.buildFilters(q.filters, paramCounter)
+		filterSql := q.buildFilters(q.filters)
 		query += fmt.Sprintf(" WHERE%s", filterSql)
 	}
 
@@ -333,10 +328,8 @@ func (q *Q[T]) buildSelect() (string, []any) {
 
 	// Having
 	if len(q.havings) > 0 && len(q.groupBys) > 0 && specialSelect {
-		filterSql, havingFilterValues, havingParamCounter := q.buildFilters(q.havings, paramCounter)
+		filterSql := q.buildFilters(q.havings)
 		query += fmt.Sprintf(" HAVING%s", filterSql)
-		filterValues = append(filterValues, havingFilterValues...)
-		paramCounter += havingParamCounter
 	}
 
 	// Order by
@@ -365,45 +358,51 @@ func (q *Q[T]) buildSelect() (string, []any) {
 		query += fmt.Sprintf(" OFFSET %d ", q.skip)
 	}
 
-	return query, filterValues
+	return query
 }
 
-func (q *Q[T]) buildFilters(filters []filter, paramCounter int) (string, []any, int) {
+func (q *Q[T]) buildFilters(filters []filter) string {
 	var query string
-	var filterValues []any
 	for i, f := range filters {
 		if i != 0 {
 			query += fmt.Sprintf(" %s", f.Separator)
 		}
+
+		// Handle nested parentheses
 		if f.Sub != nil {
-			subSql, subFilterValues, pC := q.buildFilters(f.Sub, paramCounter)
-			paramCounter = pC
-			filterValues = append(filterValues, subFilterValues...)
+			subSql := q.buildFilters(f.Sub)
 			query += fmt.Sprintf(" (%s)", subSql)
 			continue
 		}
 
+		// Handle IS NULL.
 		if f.Operation == "IS" && f.Value == nil {
 			query += fmt.Sprintf(" %s IS NULL", f.Column)
 			continue
 		}
-		parameters := []string{}
+
+		// Handle Raw condition
 		if _, ok := f.Value.(Raw); ok {
-			query += fmt.Sprintf("%s %s %s", f.Column, f.Operation, f.Value)
+			query += fmt.Sprintf(" %s %s %s", f.Column, f.Operation, f.Value)
 			continue
 		}
+
+		// Handle IN list
+		parameters := []string{}
 		if f.Operation == "IN" {
 			for _, elem := range f.Value.([]string) {
-				filterValues = append(filterValues, elem)
-				parameters = append(parameters, fmt.Sprintf("$%d", paramCounter))
-				paramCounter += 1
+				q.args = append(q.args, elem)
+				q.argsCounter += 1
+				parameters = append(parameters, fmt.Sprintf("$%d", q.argsCounter))
 			}
 			query += fmt.Sprintf(" %s IN (%s)", f.Column, strings.Join(parameters, ","))
 			continue
 		}
-		filterValues = append(filterValues, f.Value)
-		query += fmt.Sprintf(" %s %s $%d", f.Column, f.Operation, paramCounter)
-		paramCounter += 1
+
+		q.args = append(q.args, f.Value)
+		// Default condition handling.
+		q.argsCounter += 1
+		query += fmt.Sprintf(" %s %s $%d", f.Column, f.Operation, q.argsCounter)
 	}
-	return query, filterValues, paramCounter
+	return query
 }

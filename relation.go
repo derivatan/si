@@ -1,6 +1,7 @@
 package si
 
 import (
+	"fmt"
 	"github.com/gofrs/uuid"
 )
 
@@ -166,30 +167,19 @@ func (r *Relation[F, T]) Execute(db DB, result []F) error {
 	return nil
 }
 
-func (r *Relation[F, T]) Join(joinType JoinType) *Join {
+func (r *Relation[F, T]) Join(joinType JoinType) *JoinConf {
 	f := new(F)
 	t := new(T)
-	return &Join{
-		// TODO: IN the test case:
-		// Album -> artist
-		//  relationtype = belongsto
-		//  Q i want: FROM albums INNER JOIN artists ON albums.artist_id = artists.id
-
-		//  relationtype = hasone //////
-		//  Q i want: FROM artist INNER JOIN contacts ON artist.id = contact.artist_id
-
-		//  Rleationtye = hasmany
-		//  Q i want: FROM artist INNER JOIN albums ON artist.id = albums.artist_id
-
+	j1, j2 := r.relationType.joinColumns()
+	return &JoinConf{
 		JoinType: joinType,
 		Table:    (*t).GetTable(),
 		Alias:    "",
 		Condition: []filter{
 			{
-				// albums.artist_id
-				Column:    (*f).GetTable() + "." + r.relationType.queryColumn(), // TODO: Is querycolumn correct?
+				Column:    fmt.Sprintf("%s.%s", (*f).GetTable(), j1),
 				Operation: "=",
-				Value:     Raw((*t).GetTable() + "." + r.relationType.queryColumn()), // TODO: This
+				Value:     Raw(fmt.Sprintf("%s.%s", (*t).GetTable(), j2)),
 				Separator: "AND",
 			},
 		},
@@ -200,4 +190,5 @@ type relationType[F, T Modeler] interface {
 	collectID(F) uuid.UUID
 	groupBy(T) uuid.UUID
 	queryColumn() string
+	joinColumns() (string, string)
 }

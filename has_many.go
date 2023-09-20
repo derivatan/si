@@ -7,15 +7,16 @@ import (
 
 // HasMany is a relationship where there are MULTIPLE other objects (T) that points to this one (F).
 // Example:
-// .            | T    |
-// | F    |     |------|
-// |------|     | ID   |
+// | F    |     | T    |
+// |------|     |------|
+// |      |     | ID   |
 // | ID   | <-- | F_ID |
 func HasMany[F, T Modeler](model F, refFieldName, fieldName string, relationDataFunc func(f *F) *RelationData[T]) *Relation[F, T] {
 	fromType := reflect.TypeOf(new(F))
 	toType := reflect.TypeOf(new(T))
 	relationFieldName := getRelationFieldName(fromType, toType, fieldName, false)
 	column := getColumnNameString(toType, relationFieldName)
+	refColumn := getColumnNameString(toType, refFieldName)
 
 	return &Relation[F, T]{
 		model:        model,
@@ -23,7 +24,8 @@ func HasMany[F, T Modeler](model F, refFieldName, fieldName string, relationData
 		get:          Query[T]().Where(column, "=", model.GetModel().ID),
 		relationData: relationDataFunc,
 		relationType: hasManyConf[F, T]{
-			idField: column,
+			idField:   column,
+			refColumn: refColumn,
 			idValue: func(t T) uuid.UUID {
 				tVal := reflect.ValueOf(t)
 				return tVal.FieldByName(relationFieldName).Interface().(uuid.UUID)
@@ -33,8 +35,9 @@ func HasMany[F, T Modeler](model F, refFieldName, fieldName string, relationData
 }
 
 type hasManyConf[F, T Modeler] struct {
-	idField string
-	idValue func(a T) uuid.UUID
+	idField   string
+	refColumn string
+	idValue   func(a T) uuid.UUID
 }
 
 func (h hasManyConf[F, T]) collectID(f F) uuid.UUID {
@@ -47,4 +50,8 @@ func (h hasManyConf[F, T]) groupBy(t T) uuid.UUID {
 
 func (h hasManyConf[F, T]) queryColumn() string {
 	return h.idField
+}
+
+func (h hasManyConf[F, T]) joinColumns() (string, string) {
+	return "id", h.refColumn
 }
