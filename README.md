@@ -78,20 +78,19 @@ This is based on the `sql.DB`, but can easily be implemented with whatever you w
 * `si.Query[T]()` is the main entry point for retrieving data from the database.
 
   Examples
-  ```go
-	// Get alla albums that start with the letter 'a'.
-	albums, err := si.Query[Album]().Where("name", "ILIKE", "a%").OrderBy("name", true).Get(db)
-	// Get the Artist from an Album.
-	artist, err := albums[0].Artist().Find(db)
+```go
+// Get alla albums that start with the letter 'a'.
+albums, err := si.Query[Album]().Where("name", "ILIKE", "a%").OrderBy("name", true).Get(db)
+// Get the Artist from an Album.
+artist, err := albums[0].Artist().Find(db)
 
-	// Get all Artist, with all their albums. This will only execute two queries.
-	artists, err := si.Query[Artist]().With(func(a Artist, r []Artist) error {
-		return a.Albums().Execute(db, r)
-	}).Get(db)
-	// Get the albums from an Artist, since irs already fetched from the database, it does not require a `db`, and there can be no error.
-	albums := artists[0].Albums().MustFind(nil)
-
-  ```
+// Get all Artist, with all their albums. This will only execute two queries.
+artists, err := si.Query[Artist]().With(func(a Artist, r []Artist) error {
+    return a.Albums().Execute(db, r)
+}).Get(db)
+// Get the albums from an Artist, since irs already fetched from the database, it does not require a `db`, and there can be no error.
+albums := artists[0].Albums().MustFind(nil)
+```
 
 * `si.Save(model)` is used to create or update a model, with the values upon the model.
   To save relations, you must update the ID column, just as a normal column. This will **not** change what's stored in relation field if it is already loaded. 
@@ -100,17 +99,21 @@ This is based on the `sql.DB`, but can easily be implemented with whatever you w
   This logger will be called with all the queries and their arguments that _si_ generates, and might in some cases give some debugging messages. 
 
   This example will print all queries.
-  ```go
-  si.SetLogger(func(a ...any) {
-      fmt.Println(a...)
-  })
-  ```
+```go
+si.SetLogger(func(a ...any) {
+    fmt.Println(a...)
+})
+```
 
 
 ## Example and tests
 
 There are integration tests for all major functionalities in a [separate repo](http://github.com/derivatan/si_test)
-These are a also a good example for how to use the library.
+The tests are put there, in its own repository, because I don't want the library itself to import packages that are only needed for the testing.
+
+These are also a good example for how to use the library.
+
+
 
 
 ### Comments
