@@ -82,6 +82,9 @@ func getTypeInfo(obj any) typeInfo {
 		if !fieldType.IsExported() {
 			continue
 		}
+		if siTag, ok := fieldType.Tag.Lookup("si"); ok && siTag == "-" {
+			continue
+		}
 
 		if i == 0 {
 			for j := 0; j < fieldType.Type.NumField(); j++ {

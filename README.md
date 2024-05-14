@@ -67,6 +67,17 @@ A relationship is defined by two things.
 
 The field is only for _si_:s internal use and should not be used or modified in any way. To get a relation you must use the function as a query builder.
 
+To ignore a field on a model, the tag ``si:"-"`` can be used or make it unexported.
+```go
+type Artist struct {
+  si.Model
+  
+  Name string
+  IgnoredField `si:"-"` // Ignored because of the tag.
+  ignoredField // Ignored because of not exported.
+}
+```
+
 
 ### Database setup
 In order to be completely agnostic about the database, _si_ uses these [interfaces](https://github.com/derivatan/si/blob/main/db.go) for database communication.
