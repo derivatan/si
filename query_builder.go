@@ -2,7 +2,7 @@ package si
 
 import (
 	"fmt"
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 	"reflect"
 	"strings"
 )

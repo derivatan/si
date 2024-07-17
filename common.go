@@ -3,7 +3,7 @@ package si
 import (
 	"errors"
 	"fmt"
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 	"reflect"
 	"regexp"
 	"strings"

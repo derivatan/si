@@ -2,7 +2,7 @@ package si
 
 import (
 	"fmt"
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 )
 
 // Relation is the configuration for a relationship between two objects.
