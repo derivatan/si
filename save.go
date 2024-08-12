@@ -3,11 +3,12 @@ package si
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 )
 
-func save[T Modeler](db DB, m *T) error {
+func save[T Modeler](db DB, m *T, fields []string) error {
 	now := time.Now()
 	// Updated at
 	reflect.ValueOf(m).Elem().Field(0).Field(2).Set(reflect.ValueOf(&now))
@@ -18,7 +19,7 @@ func save[T Modeler](db DB, m *T) error {
 
 		return insert[T](db, m)
 	} else {
-		return update[T](db, m)
+		return update[T](db, m, fields)
 	}
 }
 
@@ -61,9 +62,9 @@ func buildInsert[T Modeler](ti typeInfo) (string, []any) {
 	return query, parameters
 }
 
-func update[T Modeler](db DB, m *T) error {
+func update[T Modeler](db DB, m *T, fields []string) error {
 	ti := getTypeInfo(m)
-	query, parameters := buildUpdate[T](ti)
+	query, parameters := buildUpdate[T](ti, fields)
 	log(query, parameters)
 
 	_, err := db.Exec(query, parameters...)
@@ -73,20 +74,25 @@ func update[T Modeler](db DB, m *T) error {
 	return nil
 }
 
-func buildUpdate[T Modeler](ti typeInfo) (string, []any) {
+func buildUpdate[T Modeler](ti typeInfo, fields []string) (string, []any) {
 
 	var columns []string
 	var parameters []any
+	var parameterCount = 1
 	for i := 1; i < len(ti.Columns); i++ {
-		columns = append(columns, fmt.Sprintf("%s=$%d", ti.Columns[i], i))
+		if fields != nil && !slices.Contains(fields, ti.Columns[i]) {
+			continue
+		}
+		columns = append(columns, fmt.Sprintf("%s=$%d", ti.Columns[i], parameterCount))
 		parameters = append(parameters, ti.Values[i])
+		parameterCount++
 	}
 
 	parameters = append(parameters, ti.Values[0])
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d",
 		(*new(T)).GetTable(),
 		strings.Join(columns, ","),
-		len(ti.Columns),
+		parameterCount,
 	)
 	return query, parameters
 }

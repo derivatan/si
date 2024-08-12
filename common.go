@@ -56,8 +56,18 @@ func Query[T Modeler]() *Q[T] {
 }
 
 // Save a model to the database.
+// If the does not have an ID, it will be inserted into the database, and the ID will be set on the model.
+// If the model has an ID, the model will be updated.
 func Save[T Modeler](db DB, m *T) error {
-	return save[T](db, m)
+	return save[T](db, m, nil)
+}
+
+// Update will update a model, but only the columns listed in `fields`.
+func Update[T Modeler](db DB, m *T, fields []string) error {
+	if (*m).GetModel().ID == nil {
+		return ResourceNotFoundError
+	}
+	return save[T](db, m, fields)
 }
 
 func log(s ...any) {
