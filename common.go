@@ -62,7 +62,14 @@ func Save[T Modeler](db DB, m *T) error {
 	return save[T](db, m, nil)
 }
 
+// Insert will create a new row in the database.
+// This can be used to force an insert, when we set a given ID, instead of generating one.
+func Insert[T Modeler](db DB, m *T) error {
+	return insert[T](db, m)
+}
+
 // Update will update a model, but only the columns listed in `fields`.
+// If you want to update the whole model, use Save
 func Update[T Modeler](db DB, m *T, fields []string) error {
 	if (*m).GetModel().ID == nil {
 		return ResourceNotFoundError
