@@ -2,6 +2,7 @@ package si
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	"reflect"
 	"slices"
 	"strings"
@@ -47,16 +48,26 @@ func insert[T Modeler](db DB, m *T) error {
 func buildInsert[T Modeler](ti typeInfo) (string, []any) {
 	var values []string
 	var parameters []any
+	columns := ti.Columns[1:]
 
 	for i := 1; i < len(ti.Values); i++ {
 		values = append(values, fmt.Sprintf("$%d", i))
 		parameters = append(parameters, ti.Values[i])
 	}
 
+	if ti.Values[0] != nil {
+		apa := ti.Values[0].(**uuid.UUID)
+		if *apa != nil {
+			values = append(values, fmt.Sprintf("$%d", len(ti.Values)))
+			parameters = append(parameters, *apa)
+			columns = append(columns, "id")
+		}
+	}
+
 	query := fmt.Sprintf(
 		"INSERT INTO %s (%s) VALUES (%s) RETURNING id",
 		(*new(T)).GetTable(),
-		strings.Join(ti.Columns[1:], ","),
+		strings.Join(columns, ","),
 		strings.Join(values, ","),
 	)
 	return query, parameters
