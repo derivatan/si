@@ -1,8 +1,9 @@
 package si
 
 import (
-	"github.com/google/uuid"
 	"reflect"
+
+	"github.com/google/uuid"
 )
 
 // HasMany is a relationship where there are MULTIPLE other objects (T) that points to this one (F).

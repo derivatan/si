@@ -2,11 +2,12 @@ package si
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"reflect"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func save[T Modeler](db DB, m *T, fields []string) error {
@@ -73,6 +74,34 @@ func buildInsert[T Modeler](ti typeInfo) (string, []any) {
 	return query, parameters
 }
 
+func delete_[T Modeler](db DB, id uuid.UUID) error {
+	query := fmt.Sprintf(
+		"UPDATE %s SET deleted_at = now() WHERE id = $1",
+		(*new(T)).GetTable(),
+	)
+	log(query, id)
+
+	_, err := db.Exec(query, id)
+	if err != nil {
+		return fmt.Errorf("si.delete: execute query: %w", err)
+	}
+	return nil
+}
+
+func deleteHard[T Modeler](db DB, id uuid.UUID) error {
+	query := fmt.Sprintf(
+		"DELETE FROM %s WHERE id = $1",
+		(*new(T)).GetTable(),
+	)
+	log(query, id)
+
+	_, err := db.Exec(query, id)
+	if err != nil {
+		return fmt.Errorf("si.deleteHard: execute query: %w", err)
+	}
+	return nil
+}
+
 func update[T Modeler](db DB, m *T, fields []string) error {
 	ti := getTypeInfo(m)
 	query, parameters := buildUpdate[T](ti, fields)
@@ -86,7 +115,6 @@ func update[T Modeler](db DB, m *T, fields []string) error {
 }
 
 func buildUpdate[T Modeler](ti typeInfo, fields []string) (string, []any) {
-
 	var columns []string
 	var parameters []any
 	var parameterCount = 1

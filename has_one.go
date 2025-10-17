@@ -1,8 +1,9 @@
 package si
 
 import (
-	"github.com/google/uuid"
 	"reflect"
+
+	"github.com/google/uuid"
 )
 
 // HasOne is a relationship where there are ONE other objects (T) that points to this one (F).

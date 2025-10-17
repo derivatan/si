@@ -1,8 +1,9 @@
 package si
 
 import (
-	"github.com/google/uuid"
 	"reflect"
+
+	"github.com/google/uuid"
 )
 
 // BelongsTo is a relationship where the object in question (F) has a reference to the other object (T)

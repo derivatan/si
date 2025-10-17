@@ -2,9 +2,10 @@ package si
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"reflect"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 type Q[T Modeler] struct {
@@ -90,7 +91,7 @@ func (q *Q[T]) Find(db DB, id ...uuid.UUID) (*T, error) {
 	}
 
 	if len(result) != 1 {
-		return nil, ResourceNotFoundError
+		return nil, ResourceNotFound()
 	}
 	return &result[0], nil
 }

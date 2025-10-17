@@ -1,7 +1,6 @@
 package si
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -23,10 +22,17 @@ type Modeler interface {
 	GetTable() string
 }
 
-var (
-	config                secretIngredientConfig
-	ResourceNotFoundError = errors.New("resource not found")
-)
+type ResourceNotFoundError struct{}
+
+func (ResourceNotFoundError) Error() string {
+	return "Resource not found"
+}
+
+func ResourceNotFound() error {
+	return ResourceNotFoundError{}
+}
+
+var config secretIngredientConfig
 
 type secretIngredientConfig struct {
 	logger       func(a ...any)
@@ -64,7 +70,7 @@ func Save[T Modeler](db DB, m *T) error {
 }
 
 // Insert will create a new row in the database.
-// This can be used to force an insert, when we set a given ID, instead of generating one.
+// This can be used to force an insert when we set a given ID instead of generating a new one.
 func Insert[T Modeler](db DB, m *T) error {
 	return insert[T](db, m)
 }
@@ -73,9 +79,19 @@ func Insert[T Modeler](db DB, m *T) error {
 // If you want to update the whole model, use Save
 func Update[T Modeler](db DB, m *T, fields []string) error {
 	if (*m).GetModel().ID == nil {
-		return ResourceNotFoundError
+		return ResourceNotFound()
 	}
 	return save[T](db, m, fields)
+}
+
+// Delete will 'soft-delete' a model from the database.
+func Delete[T Modeler](db DB, id uuid.UUID) error {
+	return delete_[T](db, id)
+}
+
+// DeleteHard will 'hard-delete' a model from the database.
+func DeleteHard[T Modeler](db DB, id uuid.UUID) error {
+	return deleteHard[T](db, id)
 }
 
 func log(s ...any) {
