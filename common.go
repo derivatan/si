@@ -3,18 +3,19 @@ package si
 import (
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"reflect"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Model struct {
-	ID        *uuid.UUID `si:"id"`
-	CreatedAt time.Time  `si:"created_at"`
-	UpdatedAt *time.Time `si:"updated_at"`
-	DeletedAt *time.Time `si:"deleted_at"`
+	ID        *uuid.UUID `si:"id" json:"id"`
+	CreatedAt time.Time  `si:"created_at" json:"createdAt"`
+	UpdatedAt *time.Time `si:"updated_at" json:"updatedAt"`
+	DeletedAt *time.Time `si:"deleted_at" json:"deletedAt"`
 }
 
 type Modeler interface {
