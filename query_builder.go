@@ -300,6 +300,9 @@ func (q *Q[T]) buildSelect() string {
 	// Joins
 	for _, jf := range q.joins {
 		j := jf(*t)
+		if config.useDeletedAt && !q.withDeleted {
+			j.Condition = append(j.Condition, filter{Column: j.Table + ".deleted_at", Operation: "IS", Value: nil, Separator: "AND"})
+		}
 		condition := q.buildFilters(j.Condition)
 		query += fmt.Sprintf(" %s JOIN %s ON%s", j.JoinType, j.Table, condition)
 	}
@@ -307,7 +310,7 @@ func (q *Q[T]) buildSelect() string {
 	// With Deleted
 	if config.useDeletedAt && !q.withDeleted {
 		otherFilters := q.filters
-		q.filters = []filter{{Column: "deleted_at", Operation: "IS", Value: nil}}
+		q.filters = []filter{{Column: table + ".deleted_at", Operation: "IS", Value: nil}}
 		if len(otherFilters) > 0 {
 			q.filters = append(q.filters, filter{
 				Separator: "AND",
