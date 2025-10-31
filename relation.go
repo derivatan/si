@@ -21,11 +21,9 @@ type RelationData[T Modeler] struct {
 	data   []T
 }
 
-func (r *Relation[F, T]) Unload() *Relation[F, T] {
+func (r *Relation[F, T]) Loaded() bool {
 	rd := r.relationData(&r.model)
-	rd.loaded = false
-	rd.data = nil
-	return r
+	return rd.loaded
 }
 
 func (r *Relation[F, T]) Get(db DB) ([]T, error) {
