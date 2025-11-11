@@ -75,6 +75,9 @@ func (q *Q[T]) First(db DB) (*T, error) {
 	if err != nil {
 		return nil, fmt.Errorf("si.first: %w", err)
 	}
+	if len(result) == 0 {
+		return nil, nil
+	}
 	return &result[0], nil
 }
 
