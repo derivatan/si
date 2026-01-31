@@ -274,7 +274,7 @@ func (q *Q[T]) With(f func(m T, r []T) error) *Q[T] {
 // WithDeleted will ignore the deleted timestamp.
 func (q *Q[T]) WithDeleted() *Q[T] {
 	if !config.useDeletedAt {
-		log("WithDeleted does nothing if the logs are disabled.")
+		log("WithDeleted does nothing if its disabled.")
 	}
 	q.withDeleted = true
 	return q

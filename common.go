@@ -62,6 +62,14 @@ func Query[T Modeler]() *Q[T] {
 	}
 }
 
+// Set will update all objects that match the filters
+func Set[T Modeler]() *S[T] {
+	return &S[T]{
+		q:    Query[T](),
+		sets: []SetConf{},
+	}
+}
+
 // Save a model to the database.
 // If the does not have an ID, it will be inserted into the database, and the ID will be set on the model.
 // If the model has an ID, the model will be updated.
